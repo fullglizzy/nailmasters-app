@@ -22,12 +22,12 @@ export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promi
 
   await db.update(schema.orders).set({ status: 'cancelled' }).where(eq(schema.orders.id, id));
 
+  const reqDate = new Date(order.requestedDateTime);
+  const dateStr = `${reqDate.getFullYear()}-${String(reqDate.getMonth() + 1).padStart(2, '0')}-${String(reqDate.getDate()).padStart(2, '0')}`;
+  const timeStr = `${String(reqDate.getHours()).padStart(2, '0')}:${String(reqDate.getMinutes()).padStart(2, '0')}:00`;
+
   // Unblock schedule slot
   try {
-    const reqDate = new Date(order.requestedDateTime);
-    const dateStr = `${reqDate.getFullYear()}-${String(reqDate.getMonth() + 1).padStart(2, '0')}-${String(reqDate.getDate()).padStart(2, '0')}`;
-    const timeStr = `${String(reqDate.getHours()).padStart(2, '0')}:${String(reqDate.getMinutes()).padStart(2, '0')}:00`;
-
     const daySlots = await db.select().from(schema.schedules).where(and(
       eq(schema.schedules.masterId, order.nailMasterId),
       eq(schema.schedules.workDate, dateStr),
@@ -45,7 +45,7 @@ export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promi
   // Notify master
   await db.insert(schema.notifications).values({
     type: 'order_cancelled', title: 'Заказ отменён',
-    message: `Запись на ${orderDate} в ${orderTime} отменена`,
+    message: `Запись на ${dateStr} в ${timeStr.slice(0, 5)} отменена`,
     recipientId: order.nailMasterId, relatedOrderId: id,
   });
 

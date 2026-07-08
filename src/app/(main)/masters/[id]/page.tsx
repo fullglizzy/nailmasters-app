@@ -244,7 +244,7 @@ export default function MasterProfilePage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {designs.map((d, i) => (
-                <DesignCard key={d.id} design={d} href={`/designs/${d.id}`} delay={Math.min(i * 40, 300)} />
+                <DesignCard key={d.id} design={d} href={`/explore/${d.id}`} delay={Math.min(i * 40, 300)} />
               ))}
             </div>
           </section>

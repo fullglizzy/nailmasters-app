@@ -7,6 +7,7 @@ import { orders } from './orders';
 export const NOTIFICATION_TYPES = [
   'order_created', 'order_confirmed', 'order_declined',
   'order_timeout', 'alternative_time_proposed', 'rating_decreased',
+  'order_cancelled', 'order_completed',
   'new_design_uploaded', 'new_comment', 'new_review',
   'master_response', 'system',
 ] as const;
