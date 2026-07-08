@@ -1,0 +1,236 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Lacquer & Precision palette ── */
+    --background: 33 23% 94%;       /* #F5F1EC — warm with lavender undertone */
+    --foreground: 260 8% 13%;       /* #1F1B26 — deep violet-black ink */
+    --card: 33 18% 90%;             /* #EDE7E0 — raised surface */
+    --card-foreground: 260 8% 13%;
+    --popover: 33 23% 94%;
+    --popover-foreground: 260 8% 13%;
+    --primary: 348 62% 50%;         /* #CC3A54 — rose lacquer */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 150 22% 49%;       /* #609A7D — salon sage */
+    --secondary-foreground: 0 0% 98%;
+    --muted: 260 5% 51%;            /* #7A7485 */
+    --muted-foreground: 260 5% 62%;
+    --accent: 33 20% 93%;           /* warm accent bg */
+    --accent-foreground: 348 62% 45%;
+    --destructive: 0 72% 49%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 34 15% 81%;           /* #D8D0C5 */
+    --input: 34 15% 81%;
+    --ring: 348 62% 50%;
+    --radius: 0.5rem;
+
+    /* Gold for highlights, stars, premium */
+    --gold: 43 48% 53%;             /* #C49B4C */
+    --gold-foreground: 0 0% 98%;
+
+    /* Typography */
+    --font-sans: 'Manrope', system-ui, -apple-system, sans-serif;
+    --font-display: 'Yeseva One', 'Times New Roman', serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  .dark {
+    --background: 262 17% 8%;       /* #13101A — lacquer bottle black */
+    --foreground: 268 18% 93%;      /* #ECE6F2 */
+    --card: 262 15% 12%;            /* #1C1825 */
+    --card-foreground: 268 18% 93%;
+    --popover: 262 15% 10%;
+    --popover-foreground: 268 18% 93%;
+    --primary: 350 72% 63%;         /* #E8566F — rose glow */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 150 36% 58%;       /* #72B894 — sage glow */
+    --secondary-foreground: 0 0% 10%;
+    --muted: 262 10% 35%;
+    --muted-foreground: 262 12% 68%;
+    --accent: 348 62% 15%;
+    --accent-foreground: 350 72% 70%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 262 12% 22%;          /* #2C2638 */
+    --input: 262 12% 22%;
+    --ring: 350 72% 63%;
+    --gold: 43 55% 60%;             /* #D4AE5D */
+    --gold-foreground: 0 0% 10%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  h1, .h1 {
+    font-family: var(--font-display);
+  }
+}
+
+/* ── Utility layer ── */
+@layer utilities {
+  .snap-y-mandatory {
+    scroll-snap-type: y mandatory;
+  }
+  .snap-start {
+    scroll-snap-align: start;
+  }
+  .snap-center {
+    scroll-snap-align: center;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Crosshatch texture — nail file motif */
+  .texture-file {
+    background-image:
+      linear-gradient(45deg, transparent 49.5%, hsl(var(--border) / 0.3) 49.5%, hsl(var(--border) / 0.3) 50.5%, transparent 50.5%),
+      linear-gradient(-45deg, transparent 49.5%, hsl(var(--border) / 0.3) 49.5%, hsl(var(--border) / 0.3) 50.5%, transparent 50.5%);
+    background-size: 8px 8px;
+  }
+
+  /* Glossy highlight — polished nail reflection on hover */
+  .gloss-highlight {
+    position: relative;
+    overflow: hidden;
+  }
+  .gloss-highlight::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.08) 40%,
+      rgba(255, 255, 255, 0.15) 50%,
+      rgba(255, 255, 255, 0.08) 60%,
+      transparent 100%
+    );
+    transition: left 0.6s ease;
+    pointer-events: none;
+  }
+  .gloss-highlight:hover::after {
+    left: 120%;
+  }
+}
+
+/* ── Sonner toast styling ── */
+.sonner-toast {
+  border-left-width: 3px !important;
+  border-left-style: solid !important;
+}
+.sonner-toast[data-type="success"] {
+  border-left-color: hsl(var(--secondary)) !important;
+}
+.sonner-toast[data-type="error"] {
+  border-left-color: hsl(var(--destructive)) !important;
+}
+.sonner-toast[data-type="warning"],
+.sonner-toast[data-type="info"] {
+  border-left-color: hsl(var(--primary)) !important;
+}
+
+@layer base {
+  /* Sonner wrapper background fix */
+  [data-sonner-toaster] {
+    --mobile-offset: 16px;
+  }
+}
+
+/* ── Accessibility ── */
+
+/* Visible focus ring for keyboard navigation */
+@layer base {
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary rounded-sm;
+  }
+
+  /* Skip to content — hidden until focused */
+  .skip-to-content {
+    position: absolute;
+    top: -100%;
+    left: 0;
+    z-index: 100;
+    padding: 0.75rem 1.5rem;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    font-weight: 600;
+    font-size: 0.875rem;
+    border-radius: 0 0 0.5rem 0;
+    transition: top 0.2s ease;
+  }
+  .skip-to-content:focus {
+    top: 0;
+  }
+
+  /* Focus ring override for interactive elements in a group */
+  .group:focus-visible {
+    outline: none;
+  }
+  .group:focus-visible .group-focus-ring {
+    @apply outline-2 outline-offset-2 outline-primary rounded-sm;
+  }
+}
+
+/* Reduced motion — respect OS preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .gloss-highlight::after {
+    display: none;
+  }
+}
+
+/* ── Skeleton loading ── */
+@layer components {
+  .skeleton {
+    @apply animate-pulse bg-muted/60 rounded-lg;
+  }
+}
+
+/* ── Modal backdrop animation ── */
+@layer components {
+  .modal-enter {
+    animation: modal-in 0.2s ease-out both;
+  }
+  .modal-exit {
+    animation: modal-out 0.15s ease-in both;
+  }
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes modal-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(16px) scale(0.97); }
+}
