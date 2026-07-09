@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface PhotoGalleryModalProps {
@@ -41,12 +42,17 @@ export function PhotoGalleryModal({ images, initialIndex = 0, onClose }: PhotoGa
         <ChevronLeft className="h-6 w-6" />
       </button>
 
-      <img
-        src={images[current]}
-        alt={`${current + 1}/${images.length}`}
-        className="max-h-[90vh] max-w-[90vw] object-contain"
-        onClick={(e) => e.stopPropagation()}
-      />
+      <div className="relative w-[90vw] h-[90vh] flex items-center justify-center">
+        <Image
+          src={images[current]}
+          alt={`${current + 1}/${images.length}`}
+          fill
+          sizes="90vw"
+          className="object-contain"
+          onClick={(e) => e.stopPropagation()}
+          priority
+        />
+      </div>
 
       <button
         onClick={(e) => { e.stopPropagation(); setCurrent((p: number) => Math.min(images.length - 1, p + 1)); }}

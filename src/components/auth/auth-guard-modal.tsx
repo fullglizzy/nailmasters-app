@@ -53,22 +53,5 @@ export function AuthGuardModal({ open, onClose, action = 'выполнить э�
   );
 }
 
-/** Check auth and return token. Returns null for guests — they need to register first. */
-export function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  const token = localStorage.getItem('token');
-  if (!token) return null;
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  if (user.isGuest) return null; // Guests must register
-  return token;
-}
-
-export function isGuest(): boolean {
-  if (typeof window === 'undefined') return false;
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  return user.isGuest === true;
-}
-
-export function isAuthenticated(): boolean {
-  return !!getAuthToken();
-}
+// Re-export from shared API client for backwards compatibility
+export { getAuthToken, isGuest, isAuthenticated } from '@/lib/api';

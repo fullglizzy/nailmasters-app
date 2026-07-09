@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { Heart, Play, ShoppingBag, Clock } from 'lucide-react';
 import { useLike } from '@/hooks/use-like';
 
@@ -12,16 +13,18 @@ interface DesignCardProps {
     _masterPrice?: string | number | null;
     _masterDuration?: string | number | null;
   };
+  /** Passed from parent via batch check (useLikedIds) — never default to false */
+  isLiked?: boolean;
   rank?: number;
   href?: string;
   delay?: number;
 }
 
-export function DesignCard({ design, rank, href, delay }: DesignCardProps) {
+export function DesignCard({ design, isLiked: isLikedProp, rank, href, delay }: DesignCardProps) {
   const { isLiked, likesCount, handleLike, isLoading } = useLike({
     designId: design.id,
     initialLikesCount: design.likesCount || 0,
-    initialIsLiked: false,
+    initialIsLiked: isLikedProp ?? false,
   });
 
   const hasVideo = design.videoUrl && design.videoUrl.trim() !== '';
@@ -52,13 +55,14 @@ export function DesignCard({ design, rank, href, delay }: DesignCardProps) {
         </div>
       )}
       {/* Media */}
-      <div className="aspect-[4/5] overflow-hidden bg-muted/40">
+      <div className="aspect-[4/5] overflow-hidden bg-muted/40 relative">
         {hasImages ? (
-          <img
+          <Image
             src={design.images![0]}
             alt={design.title}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-            loading="lazy"
+            fill
+            sizes="(max-width: 768px) 50vw, 25vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : hasVideo ? (
           <video
@@ -68,7 +72,7 @@ export function DesignCard({ design, rank, href, delay }: DesignCardProps) {
             onLoadedMetadata={e => { e.currentTarget.currentTime = 0.1; }}
           />
         ) : (
-          <img src="/placeholder.svg" alt={design.title} className="h-full w-full object-cover" loading="lazy" />
+          <Image src="/placeholder.svg" alt={design.title} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover" />
         )}
 
         {hasVideo && (

@@ -2,16 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Search, Plus, User, Bell, MessageCircle } from 'lucide-react';
+import { Search, Plus, User } from 'lucide-react';
 import { ThemeToggle } from '@/components/shared/theme-toggle';
 import { useAuthState } from '@/components/providers/guest-provider';
 import { NotificationBell } from '@/components/shared/notification-bell';
-import { useUnreadMessages } from '@/hooks/use-unread-messages';
 
 export function AppHeader() {
   const pathname = usePathname();
   const { token, role, isGuest } = useAuthState();
-  const unreadMessages = useUnreadMessages();
 
   const isAuthPage = pathname === '/auth';
   const isFeedPage = pathname.startsWith('/explore');
@@ -19,19 +17,14 @@ export function AppHeader() {
   if (isAuthPage || isFeedPage) return null;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/50 bg-background/85 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-1.5 text-xl font-bold tracking-tight" aria-label="NailMasters — на главную">
-          <span className="font-display text-primary">Nail</span>
-          <span className="hidden sm:block font-display">Masters</span>
-        </Link>
-
-        {/* Навигация */}
-        <nav className="hidden md:flex items-center gap-0.5">
+    <header className="hidden md:block sticky top-0 z-40 border-b border-border/50 bg-background/85 backdrop-blur-md">
+      <div className="mx-auto flex h-14 max-w-7xl items-center px-4">
+        {/* Навигация — centered */}
+        <nav className="hidden md:flex flex-1 justify-center items-center gap-0.5">
           {[
             { href: '/explore', label: 'Лента' },
             { href: '/trending', label: 'Популярное' },
+            { href: '/search', label: 'Поиск' },
             { href: '/client-info', label: 'Для заказчика' },
             ...(role === 'admin' ? [{ href: '/admin' as string, label: 'Админка' }] : []),
           ].map((item) => (
@@ -49,8 +42,8 @@ export function AppHeader() {
           ))}
         </nav>
 
-        {/* Действия */}
-        <div className="flex items-center gap-1.5">
+        {/* Действия — прижаты вправо */}
+        <div className="flex items-center gap-1.5 ml-auto">
           <Link
             href="/search"
             aria-label="Поиск"

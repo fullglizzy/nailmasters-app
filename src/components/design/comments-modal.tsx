@@ -4,12 +4,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Send, Heart, CornerDownRight } from 'lucide-react';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { AuthGuardModal, getAuthToken } from '@/components/auth/auth-guard-modal';
+import { useComments } from '@/hooks/api';
 
 interface Comment {
   id: string; text: string; authorId: string;
   parentCommentId: string | null;
   likesCount: number; createdAt: string;
   replies?: Comment[];
+  author?: { id: string; name: string; avatarUrl?: string | null };
 }
 
 interface Props {
@@ -20,7 +22,6 @@ interface Props {
 
 export function CommentsModal({ designId, designTitle, open, onClose, onCommentAdded }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
-  const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -28,20 +29,24 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [showAuthGuard, setShowAuthGuard] = useState(false);
 
-  // Load
+  // Load comments via React Query
+  const { data: commentsData, isLoading } = useComments(designId);
+
+  // Process and store comments when data arrives
   useEffect(() => {
-    if (!open || !designId) return;
-    setLoading(true);
-    fetch(`/api/designs/${designId}/comments`)
-      .then(r => r.json())
-      .then(json => {
-        // API отдаёт новые первыми — переворачиваем: старые сверху, новые снизу
-        if (json.success) setComments(groupComments((json.data || []).reverse()));
-      })
-      .finally(() => setLoading(false));
+    if (!commentsData) return;
+    // API отдаёт новые первыми — переворачиваем: старые сверху, новые снизу
+    setComments(groupComments([...(commentsData as Comment[])].reverse()));
     // Reset
     setText(''); setReplyingTo(null); setReplyText('');
-  }, [designId, open]);
+  }, [commentsData]);
+
+  // Reset inputs when modal opens
+  useEffect(() => {
+    if (open) {
+      setText(''); setReplyingTo(null); setReplyText('');
+    }
+  }, [open]);
 
   // Group replies under parents
   const groupComments = (all: Comment[]): Comment[] => {
@@ -96,7 +101,11 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
       });
       setLikedIds(prev => {
         const next = new Set(prev);
-        next.has(commentId) ? next.delete(commentId) : next.add(commentId);
+        if (next.has(commentId)) {
+          next.delete(commentId);
+        } else {
+          next.add(commentId);
+        }
         return next;
       });
       setComments(prev => prev.map(c => toggleLikeRecursive(c, commentId)));
@@ -126,7 +135,7 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
 
         {/* Comments list */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {loading ? (
+          {isLoading ? (
             <div className="flex justify-center py-8"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>
           ) : comments.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground text-sm">Нет комментариев. Будьте первым!</div>
@@ -137,7 +146,15 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
                 comment={c}
                 likedIds={likedIds}
                 expandedIds={expandedIds}
-                onToggleReplies={() => setExpandedIds(prev => { const next = new Set(prev); next.has(c.id) ? next.delete(c.id) : next.add(c.id); return next; })}
+                onToggleReplies={() => setExpandedIds(prev => {
+                  const next = new Set(prev);
+                  if (next.has(c.id)) {
+                    next.delete(c.id);
+                  } else {
+                    next.add(c.id);
+                  }
+                  return next;
+                })}
                 replyingTo={replyingTo}
                 replyText={replyText}
                 onReplyChange={setReplyText}
@@ -207,10 +224,10 @@ function CommentItem({
     <div className="space-y-3">
       {/* Main comment */}
       <div className="flex gap-3">
-        <UserAvatar userId={comment.authorId} />
+        <UserAvatar avatarUrl={comment.author?.avatarUrl} name={comment.author?.name} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-sm font-medium">Пользователь</span>
+            <span className="text-sm font-medium">{comment.author?.name || 'Пользователь'}</span>
             <span className="text-xs text-muted-foreground">{formatRelative(comment.createdAt)}</span>
           </div>
           <p className="text-sm text-foreground/90 break-words">{comment.text}</p>
@@ -266,11 +283,11 @@ function CommentItem({
           {comment.replies!.map(r => (
             <div key={r.id} className="flex gap-3">
               <div className="h-6 w-6 rounded-full bg-accent flex items-center justify-center shrink-0">
-                <UserAvatar userId={r.authorId} size="sm" />
+                <UserAvatar avatarUrl={r.author?.avatarUrl} name={r.author?.name} size="sm" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-xs font-medium">Пользователь</span>
+                  <span className="text-xs font-medium">{r.author?.name || 'Пользователь'}</span>
                   <span className="text-[10px] text-muted-foreground">{formatRelative(r.createdAt)}</span>
                 </div>
                 <p className="text-xs text-foreground/80 break-words">{r.text}</p>

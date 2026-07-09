@@ -6,18 +6,13 @@ import { X, Star, MapPin, Calendar, Navigation, Clock } from 'lucide-react';
 import { useModal } from '@/hooks/use-modal';
 import { DistanceBadge } from '@/components/shared/distance-badge';
 import { useGeolocation } from '@/hooks/use-geolocation';
+import { useDesignMasters } from '@/hooks/api';
+import type { Master } from '@/lib/types';
 
-interface Master {
-  userId: string; fullName: string; rating: string; city: string | null;
-  latitude: number | string | null; longitude: number | string | null;
-  _price?: string | null; _duration?: number | null;
-}
 interface Props { designId: string; designTitle: string; open: boolean; onClose: () => void; }
 
 export function MastersListModal({ designId, designTitle, open, onClose }: Props) {
   const { dialogRef, handleKeyDown } = useModal(open, onClose);
-  const [masters, setMasters] = useState<Master[]>([]);
-  const [loading, setLoading] = useState(true);
   const { coords: clientCoords, error: geoError, request: requestGeo } = useGeolocation();
   const [clientPlace, setClientPlace] = useState<string>('');
 
@@ -52,16 +47,8 @@ export function MastersListModal({ designId, designTitle, open, onClose }: Props
     if (open) requestGeo();
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    setLoading(true);
-    console.log('[MastersList] fetching designId=', designId);
-    fetch(`/api/designs/${designId}/masters`)
-      .then(r => r.json())
-      .then(json => { console.log('[MastersList] response:', json); if (json.success) setMasters(json.data || []); })
-      .catch(err => console.error('[MastersList] error:', err))
-      .finally(() => setLoading(false));
-  }, [designId, open]);
+  const { data: mastersData, isLoading } = useDesignMasters(open ? designId : undefined);
+  const masters = (mastersData || []) as Master[];
 
   const getNum = (v: number | string | null | undefined): number | null => {
     if (v == null) return null;
@@ -86,7 +73,7 @@ export function MastersListModal({ designId, designTitle, open, onClose }: Props
         </div>
 
         {/* Показываем откуда считаем расстояние */}
-        {hasCoords && masters.length > 0 && !loading && (
+        {hasCoords && masters.length > 0 && !isLoading && (
           <div className="px-4 pt-3 pb-1">
             <div className="flex items-center gap-2 rounded-lg bg-accent/30 px-3 py-2 text-xs text-muted-foreground">
               <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -96,7 +83,7 @@ export function MastersListModal({ designId, designTitle, open, onClose }: Props
         )}
 
         {/* Фолбек: если геолокация не получена — кнопка с прямым тапом для iOS Safari */}
-        {!hasCoords && !loading && masters.length > 0 && (
+        {!hasCoords && !isLoading && masters.length > 0 && (
           <div className="px-4 pt-3">
             <button
               onClick={(e) => { e.stopPropagation(); requestGeo(); }}
@@ -109,7 +96,7 @@ export function MastersListModal({ designId, designTitle, open, onClose }: Props
         )}
 
         <div className="flex-1 overflow-y-auto p-4">
-          {loading ? (
+          {isLoading ? (
             <div className="flex justify-center py-8"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>
           ) : masters.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">Пока нет мастеров для этого дизайна</p>

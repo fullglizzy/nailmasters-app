@@ -2,37 +2,58 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import Image from 'next/image';
 import {
   Heart, MessageCircle, Eye, CalendarCheck, Share2, Volume2, VolumeX,
   ChevronUp, ChevronDown, ArrowLeft, Play, Sparkles, X,
 } from 'lucide-react';
+import { useAuthState } from '@/components/providers/guest-provider';
 import { useLike } from '@/hooks/use-like';
+import { useDesigns } from '@/hooks/api';
+import { useLikedIds } from '@/hooks/use-liked-ids';
 import { CommentsModal } from '@/components/design/comments-modal';
 import { DesignDetailsModal } from '@/components/design/design-details-modal';
 import { MastersListModal } from '@/components/design/masters-list-modal';
 import { ShareModal } from '@/components/design/share-modal';
+import type { FeedDesign } from '@/lib/types';
 
-interface FeedDesign {
-  id: string; title: string; description: string | null;
-  images: string[]; videoUrl: string | null;
-  likesCount: number; tags: string[] | null;
+// ── Helpers ──────────────────────────────────────────────
+
+function getAllMedia(design: FeedDesign): { type: 'video' | 'image'; url: string }[] {
+  const m: { type: 'video' | 'image'; url: string }[] = [];
+  if (design.videoUrl) m.push({ type: 'video', url: design.videoUrl });
+  if (design.images?.length) design.images.forEach((url) => m.push({ type: 'image', url }));
+  return m;
 }
+
+// ── Page ─────────────────────────────────────────────────
 
 export default function TikTokFeedPage() {
   const { id: startId } = useParams<{ id: string }>();
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const currentIndexRef = useRef(0);
+  const urlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasScrolledToStart = useRef(false);
 
-  const [designs, setDesigns] = useState<FeedDesign[]>([]);
+  const { role } = useAuthState();
+
+  // ── Data: single RQ query, cached & deduplicated ──────
+  const { data: designs = [], isLoading } = useDesigns({
+    sort: 'popular',
+    includeOwn: true,
+    limit: 40,
+  });
+
+  // Batch liked state — 1 API call, not N
+  const likedIds = useLikedIds();
+
+  // ── Local UI state ────────────────────────────────────
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [mediaIdx, setMediaIdx] = useState<Record<string, number>>({});
   const [videoMuted, setVideoMuted] = useState<Record<string, boolean>>({});
   const [videoPlaying, setVideoPlaying] = useState<Record<string, boolean>>({});
-  const currentIndexRef = useRef(0);
-  const urlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Modals
   const [commentsFor, setCommentsFor] = useState<FeedDesign | null>(null);
@@ -48,26 +69,30 @@ export default function TikTokFeedPage() {
     else router.push('/');
   };
 
-  // 1. Load designs
+  // ── Init muted state when designs load ─────────────────
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/designs?limit=40&sort=popular&includeOwn=true');
-        const json = await res.json();
-        const list = (json.success && json.data) ? (Array.isArray(json.data) ? json.data : []) : [];
-        setDesigns(list);
+    if (!designs.length || isLoading) return;
+    const muted: Record<string, boolean> = {};
+    designs.forEach((d) => {
+      if ((d as FeedDesign).videoUrl) muted[d.id] = true;
+    });
+    setVideoMuted(muted);
+  }, [designs, isLoading]);
 
-        // Init muted: all videos start muted, only current card unmutes
-        const muted: Record<string, boolean> = {};
-        list.forEach((d: FeedDesign) => { if (d.videoUrl) muted[d.id] = true; });
-        setVideoMuted(muted);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  // ── Scroll to startId once ─────────────────────────────
+  useEffect(() => {
+    if (isLoading || !designs.length || !containerRef.current || hasScrolledToStart.current) return;
+    const idx = designs.findIndex((d) => d.id === startId);
+    if (idx >= 0) {
+      hasScrolledToStart.current = true;
+      const h = containerRef.current.clientHeight;
+      containerRef.current.scrollTo({ top: idx * h, behavior: 'instant' as ScrollBehavior });
+      setCurrentIndex(idx);
+      currentIndexRef.current = idx;
+    }
+  }, [isLoading, designs, startId]);
 
-  // 2. Video management: pause all except active, restart from beginning, unmute only active
+  // ── Video: pause all except active ─────────────────────
   useEffect(() => {
     designs.forEach((d, i) => {
       const v = videoRefs.current[d.id];
@@ -75,35 +100,22 @@ export default function TikTokFeedPage() {
       if (i === currentIndex) {
         v.currentTime = 0;
         v.play().catch(() => {});
-        setVideoPlaying(p => ({ ...p, [d.id]: true }));
-        setVideoMuted(p => ({ ...p, [d.id]: false }));
+        setVideoPlaying((p) => ({ ...p, [d.id]: true }));
+        setVideoMuted((p) => ({ ...p, [d.id]: false }));
       } else {
         v.pause();
-        setVideoPlaying(p => ({ ...p, [d.id]: false }));
-        setVideoMuted(p => ({ ...p, [d.id]: true }));
+        setVideoPlaying((p) => ({ ...p, [d.id]: false }));
+        setVideoMuted((p) => ({ ...p, [d.id]: true }));
       }
     });
   }, [currentIndex, designs]);
 
-  // 3. Scroll to startId after DOM is ready
-  useEffect(() => {
-    if (loading || !designs.length || !containerRef.current) return;
-    const idx = designs.findIndex((d) => d.id === startId);
-    if (idx >= 0) {
-      const h = containerRef.current.clientHeight;
-      containerRef.current.scrollTo({ top: idx * h, behavior: 'instant' as ScrollBehavior });
-      setCurrentIndex(idx);
-      currentIndexRef.current = idx;
-    }
-  }, [loading, designs, startId]);
-
-  // Helper: update ref only (no state change on scroll = no re-render)
+  // ── Navigation ─────────────────────────────────────────
   const updateIndex = useCallback((idx: number) => {
     currentIndexRef.current = idx;
-    setCurrentIndex(idx); // still update state for UI arrows, but it won't cause full re-render
+    setCurrentIndex(idx);
   }, []);
 
-  // Helpers
   const scrollToIndex = useCallback((idx: number) => {
     const el = containerRef.current;
     if (!el) return;
@@ -114,47 +126,39 @@ export default function TikTokFeedPage() {
   const goNext = () => { if (currentIndex < designs.length - 1) scrollToIndex(currentIndex + 1); };
   const goPrev = () => { if (currentIndex > 0) scrollToIndex(currentIndex - 1); };
 
-  // 3. One-card-at-a-time scroll: intercept wheel + touch to prevent skipping
+  // ── One-card-at-a-time scroll ──────────────────────────
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !designs.length) return;
 
     let wheelAccum = 0;
-    const THRESHOLD = 50; // px of wheel delta before triggering a card change
+    const THRESHOLD = 50;
     let scrolling = false;
 
-    // Wheel: accumulate delta, fire one card at a time
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       if (scrolling) return;
       wheelAccum += e.deltaY;
-
       if (Math.abs(wheelAccum) >= THRESHOLD) {
         scrolling = true;
         const direction = wheelAccum > 0 ? 1 : -1;
         wheelAccum = 0;
         const target = currentIndexRef.current + direction;
-        if (target >= 0 && target < designs.length) {
-          scrollToIndex(target);
-        }
-        // Lock for animation duration
+        if (target >= 0 && target < designs.length) scrollToIndex(target);
         setTimeout(() => { scrolling = false; }, 600);
       }
     };
 
-    // Touch: track start/end, swipe if enough distance
     let touchStartY = 0;
     const onTouchStart = (e: TouchEvent) => { touchStartY = e.touches[0].clientY; };
     const onTouchEnd = (e: TouchEvent) => {
       if (scrolling) return;
       const diff = touchStartY - e.changedTouches[0].clientY;
-      if (Math.abs(diff) < 40) return; // too small — ignore
+      if (Math.abs(diff) < 40) return;
       scrolling = true;
       const direction = diff > 0 ? 1 : -1;
       const target = currentIndexRef.current + direction;
-      if (target >= 0 && target < designs.length) {
-        scrollToIndex(target);
-      }
+      if (target >= 0 && target < designs.length) scrollToIndex(target);
       setTimeout(() => { scrolling = false; }, 600);
     };
 
@@ -168,7 +172,7 @@ export default function TikTokFeedPage() {
     };
   }, [designs, scrollToIndex]);
 
-  // 4. Scroll tracking + seamless URL sync (native history API = no re-render)
+  // ── Scroll tracking + URL sync ─────────────────────────
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !designs.length) return;
@@ -177,10 +181,8 @@ export default function TikTokFeedPage() {
       const idx = Math.round(el.scrollTop / el.clientHeight);
       if (idx < 0 || idx >= designs.length) return;
       if (idx === currentIndexRef.current) return;
-
       updateIndex(idx);
 
-      // Use native history.replaceState — does NOT trigger React/Next.js re-render
       if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
       urlTimerRef.current = setTimeout(() => {
         const d = designs[idx];
@@ -197,6 +199,7 @@ export default function TikTokFeedPage() {
     };
   }, [designs, updateIndex]);
 
+  // ── Media interaction ──────────────────────────────────
   const toggleSound = (designId: string) => {
     const v = videoRefs.current[designId];
     if (!v) return;
@@ -208,16 +211,13 @@ export default function TikTokFeedPage() {
     const v = videoRefs.current[designId];
     if (!v) return;
     const relX = (e.clientX - v.getBoundingClientRect().left) / v.getBoundingClientRect().width;
-
     if (relX > 0.3 && relX < 0.7) {
-      // Center = play/pause
       v.paused ? v.play() : v.pause();
       setVideoPlaying((p) => ({ ...p, [designId]: !v.paused }));
     } else {
-      // Edges = prev/next media
       const d = designs.find((x) => x.id === designId);
       if (!d) return;
-      const all = getAllMedia(d);
+      const all = getAllMedia(d as FeedDesign);
       if (all.length <= 1) return;
       const cur = mediaIdx[designId] || 0;
       const next = relX > 0.5 ? (cur + 1) % all.length : (cur - 1 + all.length) % all.length;
@@ -230,14 +230,13 @@ export default function TikTokFeedPage() {
   const handleImageClick = (designId: string, e: React.MouseEvent) => {
     const d = designs.find((x) => x.id === designId);
     if (!d) return;
-    const all = getAllMedia(d);
+    const all = getAllMedia(d as FeedDesign);
     if (all.length <= 1) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const relX = (e.clientX - rect.left) / rect.width;
     const cur = mediaIdx[designId] || 0;
     const next = relX > 0.5 ? (cur + 1) % all.length : (cur - 1 + all.length) % all.length;
     setMediaIdx((p) => ({ ...p, [designId]: next }));
-    // Auto-play if switched to video
     if (all[next]?.type === 'video') {
       setTimeout(() => {
         const v = videoRefs.current[designId];
@@ -247,19 +246,25 @@ export default function TikTokFeedPage() {
     }
   };
 
-  if (loading) {
-    return <div className="fixed inset-0 bg-background flex items-center justify-center">
-      <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/15 border-t-primary" />
-    </div>;
-  }
-  if (!designs.length) {
-    return <div className="fixed inset-0 bg-background flex flex-col items-center justify-center">
-      <p className="text-xl mb-4">Нет дизайнов</p>
-      <button onClick={goBack} className="text-primary hover:underline">Вернуться</button>
-    </div>;
+  // ── Loading / empty ────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 bg-background flex items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/15 border-t-primary" />
+      </div>
+    );
   }
 
-  const current = designs[currentIndex];
+  if (!designs.length) {
+    return (
+      <div className="fixed inset-0 bg-background flex flex-col items-center justify-center">
+        <p className="text-xl mb-4">Нет дизайнов</p>
+        <button onClick={goBack} className="text-primary hover:underline">Вернуться</button>
+      </div>
+    );
+  }
+
+  const castDesign = (d: typeof designs[number]): FeedDesign => d as unknown as FeedDesign;
 
   return (
     <div className="fixed inset-0 bg-background">
@@ -269,7 +274,8 @@ export default function TikTokFeedPage() {
 
       {/* Feed */}
       <div ref={containerRef} className="h-full overflow-y-auto snap-y snap-mandatory hide-scrollbar" style={{ scrollBehavior: 'smooth' }}>
-        {designs.map((design) => {
+        {designs.map((d) => {
+          const design = castDesign(d);
           const allMedia = getAllMedia(design);
           const curMediaIdx = mediaIdx[design.id] || 0;
           const curMedia = allMedia[curMediaIdx] || allMedia[0] || { type: 'image' as const, url: '/placeholder.svg' };
@@ -298,17 +304,16 @@ export default function TikTokFeedPage() {
                         onLoadedMetadata={() => {
                           const v = videoRefs.current[design.id];
                           if (!v) return;
-                          const idx = designs.findIndex(d => d.id === design.id);
+                          const idx = designs.findIndex((x) => x.id === design.id);
                           if (idx === currentIndexRef.current) {
                             v.currentTime = 0;
                             v.play().catch(() => {});
-                            setVideoPlaying(p => ({ ...p, [design.id]: true }));
-                            setVideoMuted(p => ({ ...p, [design.id]: false }));
+                            setVideoPlaying((p) => ({ ...p, [design.id]: true }));
+                            setVideoMuted((p) => ({ ...p, [design.id]: false }));
                           } else {
-                            // Preload but don't play; ensure paused and muted
                             v.pause();
                             v.muted = true;
-                            setVideoMuted(p => ({ ...p, [design.id]: true }));
+                            setVideoMuted((p) => ({ ...p, [design.id]: true }));
                           }
                         }}
                       />
@@ -319,28 +324,42 @@ export default function TikTokFeedPage() {
                       </div>
                     </>
                   ) : (
-                    <img src={curMedia.url} alt={design.title} className="w-full h-full object-cover cursor-pointer"
-                      onClick={(e) => handleImageClick(design.id, e)} />
+                    <Image
+                      src={curMedia.url} alt={design.title} fill
+                      sizes="(max-width: 768px) 100vw, 55vh"
+                      className="object-cover cursor-pointer"
+                      onClick={(e) => handleImageClick(design.id, e)}
+                    />
                   )}
 
-                  {/* Gradient */}
+                  {/* Gradient overlay */}
                   <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)' }} />
 
-                  {/* Sidebar */}
+                  {/* Right sidebar — TikTok-style action buttons */}
                   <div className="absolute right-5 top-[70%] -translate-y-1/2 flex flex-col gap-5 items-center z-20">
-                    <LikeButton designId={design.id} likesCount={design.likesCount} />
-                    <CommentButton designId={design.id} onClick={() => setCommentsFor(design)} refreshKey={commentRefreshKey} />
+                    <LikeButton designId={design.id} likesCount={design.likesCount} isLiked={likedIds.has(design.id)} />
+                    <SideBtn icon={MessageCircle} label="Коммент." onClick={() => setCommentsFor(design)} />
                     <SideBtn icon={Eye} label="Подробнее" onClick={() => setDetailsFor(design)} />
-                    <CanDoButton designId={design.id} onOpen={() => setCanDoDesign(design.id)} />
+                    {role === 'nailmaster' && (
+                      <SideBtn icon={Sparkles} label="Я так могу" onClick={() => setCanDoDesign(design.id)} />
+                    )}
                     <SideBtn icon={CalendarCheck} label="Записаться" onClick={() => setMastersFor(design)} />
                     <SideBtn icon={Share2} label="Поделиться" onClick={() => setShareFor(design)} />
-                    {isVideo && <SideBtn icon={videoMuted[design.id] ? VolumeX : Volume2} label="Звук" onClick={() => toggleSound(design.id)} />}
+                    {isVideo && (
+                      <SideBtn
+                        icon={videoMuted[design.id] ? VolumeX : Volume2}
+                        label="Звук"
+                        onClick={() => toggleSound(design.id)}
+                      />
+                    )}
                   </div>
 
-                  {/* Bottom info — compact */}
+                  {/* Bottom info */}
                   <div className="absolute bottom-0 left-0 right-[80px] p-5 pb-[60px] z-10 text-white">
                     <h2 className="text-xl font-bold leading-tight mb-1.5">{design.title}</h2>
-                    {design.description && <p className="text-xs leading-relaxed opacity-70 line-clamp-1 mb-2">{design.description}</p>}
+                    {design.description && (
+                      <p className="text-xs leading-relaxed opacity-70 line-clamp-1 mb-2">{design.description}</p>
+                    )}
                     {design.tags && design.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {design.tags.slice(0, 3).map((t) => (
@@ -355,10 +374,13 @@ export default function TikTokFeedPage() {
 
                   {/* Media dots */}
                   {allMedia.length > 1 && (
-                    <div className="hidden md:flex absolute bottom-5 left-5 right-5 z-20 justify-center gap-2">
+                    <div className="flex absolute bottom-5 left-5 right-5 z-20 justify-center gap-2">
                       {allMedia.map((_, i) => (
-                        <button key={i} onClick={() => setMediaIdx((p) => ({ ...p, [design.id]: i }))}
-                          className={`rounded-full transition-all ${i === curMediaIdx ? 'w-6 h-2 bg-white' : 'w-2 h-2 bg-white/50 hover:bg-white/80'}`} />
+                        <button
+                          key={i}
+                          onClick={() => setMediaIdx((p) => ({ ...p, [design.id]: i }))}
+                          className={`rounded-full transition-all ${i === curMediaIdx ? 'w-6 h-2 bg-white' : 'w-2 h-2 bg-white/50 hover:bg-white/80'}`}
+                        />
                       ))}
                     </div>
                   )}
@@ -369,14 +391,20 @@ export default function TikTokFeedPage() {
         })}
       </div>
 
-      {/* Nav arrows */}
+      {/* Desktop nav arrows */}
       <div className="hidden md:flex fixed right-10 top-1/2 -translate-y-1/2 flex-col gap-4 z-30">
         <NavBtn onClick={goPrev} disabled={currentIndex === 0}><ChevronUp className="h-[35px] w-[35px]" /></NavBtn>
         <NavBtn onClick={goNext} disabled={currentIndex >= designs.length - 1}><ChevronDown className="h-[35px] w-[35px]" /></NavBtn>
       </div>
 
       {/* Modals */}
-      {commentsFor && <CommentsModal designId={commentsFor.id} designTitle={commentsFor.title} open={!!commentsFor} onClose={() => setCommentsFor(null)} onCommentAdded={() => setCommentRefreshKey(k => k + 1)} />}
+      {commentsFor && (
+        <CommentsModal
+          designId={commentsFor.id} designTitle={commentsFor.title}
+          open={!!commentsFor} onClose={() => setCommentsFor(null)}
+          onCommentAdded={() => setCommentRefreshKey((k) => k + 1)}
+        />
+      )}
       {detailsFor && <DesignDetailsModal design={detailsFor} open={!!detailsFor} onClose={() => setDetailsFor(null)} />}
       {mastersFor && <MastersListModal designId={mastersFor.id} designTitle={mastersFor.title} open={!!mastersFor} onClose={() => setMastersFor(null)} />}
       {shareFor && <ShareModal open={!!shareFor} onClose={() => setShareFor(null)} title={shareFor.title} designId={shareFor.id} />}
@@ -385,113 +413,87 @@ export default function TikTokFeedPage() {
   );
 }
 
-// Sub-components
-function LikeButton({ designId, likesCount: initial }: { designId: string; likesCount: number }) {
-  const { isLiked, likesCount, handleLike } = useLike({ designId, initialLikesCount: initial, initialIsLiked: false });
+// ── Sub-components ───────────────────────────────────────
+
+/** Like button — uses optimistic hook, zero eager API calls */
+function LikeButton({ designId, likesCount, isLiked: isLikedProp }: { designId: string; likesCount: number; isLiked: boolean }) {
+  const { isLiked, likesCount: count, handleLike } = useLike({
+    designId,
+    initialLikesCount: likesCount,
+    initialIsLiked: isLikedProp,
+  });
   return (
     <button onClick={handleLike} className="flex flex-col items-center gap-0 group">
       <div className="transition-all group-hover:scale-110 group-active:scale-95">
         <Heart className={`h-8 w-8 text-white ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
-      </div>
-      <span className="text-[11px] text-white font-medium">{likesCount}</span>
-    </button>
-  );
-}
-
-function CommentButton({ designId, onClick, refreshKey }: { designId: string; onClick: () => void; refreshKey?: number }) {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    fetch(`/api/designs/${designId}/comments?count=1`)
-      .then(r => r.json())
-      .then(json => { if (json.success && json.data) setCount(json.data.total || 0); })
-      .catch(() => {});
-  }, [designId, refreshKey]);
-  return (
-    <button onClick={onClick} className="flex flex-col items-center gap-0 group">
-      <div className="transition-all group-hover:scale-110 group-active:scale-95">
-        <MessageCircle className="h-8 w-8 text-white" />
       </div>
       <span className="text-[11px] text-white font-medium">{count}</span>
     </button>
   );
 }
 
-function CanDoButton({ designId, onOpen }: { designId: string; onOpen: () => void }) {
-  const [role, setRole] = useState('');
-  const [added, setAdded] = useState(false);
-
-  useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    setRole(user.role || '');
-    if (user.role === 'nailmaster') {
-      fetch(`/api/masters/can-do/${designId}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
-        .then(r => r.json()).then(json => { if (json.success) setAdded(json.data.canDo); }).catch(() => {});
-    }
-  }, [designId]);
-
-  if (role !== 'nailmaster') return null;
-
-  return (
-    <button onClick={onOpen} className="flex flex-col items-center gap-0 group">
-      <div className={`transition-all group-hover:scale-110 group-active:scale-95 ${added ? 'text-gold' : 'text-white'}`}>
-        <Sparkles className={`h-8 w-8 ${added ? 'fill-gold/30' : ''}`} />
-      </div>
-      <span className="text-[9px] text-white/80 font-medium text-center leading-tight max-w-[60px]">
-        {added ? 'В моих' : 'Я так могу'}
-      </span>
-    </button>
-  );
-}
-
+/** "Я так могу" modal — fetches state only when opened, not per card */
 function CanDoModal({ designId, onClose }: { designId: string; onClose: () => void }) {
   const [added, setAdded] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState('');
 
+  // Fetch once on open
   useEffect(() => {
     const token = localStorage.getItem('token');
-    fetch(`/api/masters/can-do/${designId}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(json => {
+    fetch(`/api/masters/can-do/${designId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((json) => {
         if (json.success) {
           setAdded(json.data.canDo);
           if (json.data.price) setPrice(String(json.data.price));
           if (json.data.duration) setDuration(String(json.data.duration));
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [designId]);
 
   const handleSave = async () => {
-    setLoading(true);
+    setSaving(true);
     const token = localStorage.getItem('token');
     try {
       const body: Record<string, unknown> = {};
       if (price) body.customPrice = String(parseInt(price) || 0);
       if (duration) body.estimatedDuration = parseInt(duration) || 0;
-      const res = await fetch(`/api/masters/can-do/${designId}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body),
+      await fetch(`/api/masters/can-do/${designId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
       });
-      if (res.ok) { setAdded(true); onClose(); }
+      setAdded(true);
+      onClose();
     } catch {}
-    finally { setLoading(false); }
+    finally { setSaving(false); }
   };
 
   const handleRemove = async () => {
-    setLoading(true);
+    setSaving(true);
     const token = localStorage.getItem('token');
     try {
-      await fetch(`/api/masters/can-do/${designId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-      setAdded(false); setPrice(''); setDuration(''); onClose();
+      await fetch(`/api/masters/can-do/${designId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setAdded(false); setPrice(''); setDuration('');
+      onClose();
     } catch {}
-    finally { setLoading(false); }
+    finally { setSaving(false); }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div className="fixed inset-0 bg-black/50 animate-in fade-in duration-200" />
-      <div className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-background p-6 shadow-xl modal-enter" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-background p-6 shadow-xl modal-enter" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="font-bold text-lg">{added ? 'Изменить условия' : 'Я так могу'}</h2>
@@ -499,26 +501,31 @@ function CanDoModal({ designId, onClose }: { designId: string; onClose: () => vo
           </div>
           <button onClick={onClose} className="rounded-full p-1.5 hover:bg-muted/50"><X className="h-5 w-5" /></button>
         </div>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Цена (₽)</label>
-            <input value={price} onChange={e => setPrice(e.target.value)} type="number" min="100" placeholder="2500" autoFocus
-              className="w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+
+        {loading ? (
+          <div className="flex justify-center py-8"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Цена (₽)</label>
+              <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" min="100" placeholder="2500" autoFocus
+                className="w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Время (мин)</label>
+              <input value={duration} onChange={(e) => setDuration(e.target.value)} type="number" min="15" step="15" placeholder="60"
+                className="w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Время (мин)</label>
-            <input value={duration} onChange={e => setDuration(e.target.value)} type="number" min="15" step="15" placeholder="60"
-              className="w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-          </div>
-        </div>
+        )}
         <div className="flex gap-2 mt-6">
           {added && (
             <button onClick={handleRemove} className="flex-1 rounded-full border border-destructive/30 bg-destructive/10 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/20">
               Убрать из моих
             </button>
           )}
-          <button onClick={handleSave} disabled={loading} className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-            {loading ? 'Сохранение...' : 'Сохранить'}
+          <button onClick={handleSave} disabled={saving || loading} className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
         </div>
       </div>
@@ -544,11 +551,4 @@ function NavBtn({ children, disabled, onClick }: { children: React.ReactNode; di
       {children}
     </button>
   );
-}
-
-function getAllMedia(design: FeedDesign): { type: 'video' | 'image'; url: string }[] {
-  const m: { type: 'video' | 'image'; url: string }[] = [];
-  if (design.videoUrl) m.push({ type: 'video', url: design.videoUrl });
-  if (design.images?.length) design.images.forEach((url) => m.push({ type: 'image', url }));
-  return m;
 }

@@ -1,33 +1,28 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
 import {
-  Users, Palette, ShoppingBag, BarChart3, Shield, Search, Check, X, Eye,
-  Ban, UserCheck, Star, Grid3X3, TrendingUp, Clock
+  Users, Palette, ShoppingBag, BarChart3, Shield, Search,
+  Star, Clock, TrendingUp
 } from 'lucide-react';
+import { useAdminStats, useAdminUsers, useAdminDesigns, useAdminOrders } from '@/hooks/api';
+import { useMasters } from '@/hooks/api';
+import type { AdminUser, Design, OrderEnriched, Master } from '@/lib/types';
 import { OrderDetailModal } from './order-detail-modal';
-
-interface Stats { totalUsers: number; totalMasters: number; totalClients: number; totalDesigns: number; totalOrders: number; activeOrders: number; totalUploads: number; revenue: number; }
-interface User { id: string; email: string; username: string; role: string; blocked: boolean; createdAt: string; }
-interface Design { id: string; title: string; images: string[]; isModerated: boolean; isActive: boolean; type: string; source: string; likesCount: number; createdAt: string; }
-interface Order { id: string; status: string; price: string; requestedDateTime: string; clientId: string; nailMasterId: string; }
 
 type Tab = 'overview' | 'users' | 'designs' | 'orders' | 'masters';
 
 export default function AdminPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('overview');
   const [role, setRole] = useState('');
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
-  const [designs, setDesigns] = useState<Design[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [masters, setMasters] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [selectedOrder, setSelectedOrder] = useState<OrderEnriched | null>(null);
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
 
   // Auth check
   useEffect(() => {
@@ -37,59 +32,40 @@ export default function AdminPage() {
     setRole(user.role);
   }, [router]);
 
-  const fetchApi = (url: string) => {
-    const token = localStorage.getItem('token');
-    return fetch(url, { headers: { Authorization: `Bearer ${token!}` } }).then(r => r.json());
-  };
+  // RQ hooks — auto-fetch when token exists
+  const { data: stats, isLoading: statsLoading } = useAdminStats();
+  const { data: users = [] } = useAdminUsers(search);
+  const { data: designs = [] } = useAdminDesigns();
+  const { data: orders = [] } = useAdminOrders();
+  const { data: masters = [] } = useMasters({ limit: 100 });
 
-  // Load stats
-  useEffect(() => {
-    if (role !== 'admin') return;
-    fetchApi('/api/admin/stats').then(j => { if (j.success) setStats(j.data); }).finally(() => setLoading(false));
-  }, [role]);
-
-  // Load tab data
-  const loadUsers = useCallback(() => {
-    fetchApi(`/api/admin/users?page=${page}&limit=20&search=${search}`).then(j => { if (j.success) setUsers(j.data); });
-  }, [page, search]);
-  const loadDesigns = useCallback(() => {
-    fetchApi(`/api/designs/admin/all?page=${page}&limit=20`).then(j => { if (j.success) setDesigns(j.data); });
-  }, [page]);
-  const loadOrders = useCallback(() => {
-    fetchApi(`/api/admin/orders?page=${page}&limit=20`).then(j => { if (j.success) setOrders(j.data); });
-  }, [page]);
-  const loadMasters = useCallback(() => {
-    fetchApi('/api/masters?limit=100').then(j => { if (j.success) setMasters(j.data); });
-  }, []);
-
-  useEffect(() => { if (tab === 'users') loadUsers(); }, [tab, loadUsers]);
-  useEffect(() => { if (tab === 'designs') loadDesigns(); }, [tab, loadDesigns]);
-  useEffect(() => { if (tab === 'orders') loadOrders(); }, [tab, loadOrders]);
-  useEffect(() => { if (tab === 'masters') loadMasters(); }, [tab, loadMasters]);
+  const isLoading = statsLoading && role === 'admin';
 
   const handleBlock = async (userId: string) => {
     const token = localStorage.getItem('token');
     await fetch(`/api/admin/users/${userId}/block`, { method: 'PUT', headers: { Authorization: `Bearer ${token!}` } });
-    loadUsers();
+    queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
   };
+
   const handleModerate = async (designId: string, approved: boolean) => {
     const token = localStorage.getItem('token');
     await fetch(`/api/designs/${designId}/moderate`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token!}` }, body: JSON.stringify({ isModerated: approved, isActive: approved }) });
-    loadDesigns();
+    queryClient.invalidateQueries({ queryKey: ['admin', 'designs'] });
   };
+
   const handleDeleteDesign = async (designId: string) => {
     if (!confirm('Удалить дизайн навсегда?')) return;
     const token = localStorage.getItem('token');
     const res = await fetch(`/api/designs/${designId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token!}` } });
     if (res.ok) {
-      setDesigns(prev => prev.filter(d => d.id !== designId));
+      queryClient.invalidateQueries({ queryKey: ['admin', 'designs'] });
     }
   };
 
-  if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
+  if (isLoading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
   if (role !== 'admin') return null;
 
-  const tabs: { id: Tab; label: string; icon: any }[] = [
+  const tabs: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'overview', label: 'Обзор', icon: BarChart3 },
     { id: 'users', label: 'Пользователи', icon: Users },
     { id: 'designs', label: 'Дизайны', icon: Palette },
@@ -158,7 +134,7 @@ export default function AdminPage() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50"><tr><th className="text-left p-3 font-medium">Пользователь</th><th className="text-left p-3 font-medium">Роль</th><th className="text-left p-3 font-medium">Статус</th><th className="text-right p-3 font-medium">Действия</th></tr></thead>
                 <tbody>
-                  {users.map(u => (
+                  {users.map((u: AdminUser) => (
                     <tr key={u.id} className="border-t">
                       <td className="p-3"><div className="font-medium">{u.username}</div><div className="text-xs text-muted-foreground">{u.email}</div></td>
                       <td className="p-3"><span className="capitalize text-xs">{u.role === 'nailmaster' ? 'Мастер' : u.role === 'admin' ? 'Админ' : 'Клиент'}</span></td>
@@ -180,9 +156,11 @@ export default function AdminPage() {
         {tab === 'designs' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-              {designs.map(d => (
-                <a key={d.id} href={`/explore/${d.id}`} className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-all">
-                  <div className="aspect-square"><img src={d.images?.[0] || '/placeholder.svg'} alt={d.title} className="h-full w-full object-cover" /></div>
+              {designs.map((d: Design) => (
+                <Link key={d.id} href={`/explore/${d.id}`} className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-all">
+                  <div className="aspect-square relative bg-muted">
+                    <Image src={d.images?.[0] || '/placeholder.svg'} alt={d.title} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover" />
+                  </div>
                   <div className="p-3 space-y-2">
                     <div className="text-sm font-medium truncate">{d.title}</div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -202,7 +180,7 @@ export default function AdminPage() {
                       <button onClick={(e) => { e.preventDefault(); handleDeleteDesign(d.id); }} className="rounded-full bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/20" title="Удалить">🗑</button>
                     </div>
                   </div>
-                </a>
+                </Link>
               ))}
             </div>
           </div>
@@ -215,11 +193,11 @@ export default function AdminPage() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50"><tr><th className="text-left p-3 font-medium">ID</th><th className="text-left p-3 font-medium">Статус</th><th className="text-left p-3 font-medium">Сумма</th><th className="text-left p-3 font-medium">Дата</th></tr></thead>
                 <tbody>
-                  {orders.map(o => (
+                  {orders.map((o: OrderEnriched) => (
                     <tr key={o.id} className="border-t cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setSelectedOrder(o)}>
                       <td className="p-3 font-mono text-xs">{o.id.slice(0, 8)}...</td>
                       <td className="p-3"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${o.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : o.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-muted text-muted-foreground'}`}>{o.status}</span></td>
-                      <td className="p-3 font-medium">{parseInt(o.price || '0').toLocaleString()} ₽</td>
+                      <td className="p-3 font-medium">{parseInt(String(o.price || '0')).toLocaleString()} ₽</td>
                       <td className="p-3 text-muted-foreground">{new Date(o.requestedDateTime).toLocaleDateString('ru')}</td>
                     </tr>
                   ))}
@@ -236,11 +214,11 @@ export default function AdminPage() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50"><tr><th className="text-left p-3 font-medium">Мастер</th><th className="text-left p-3 font-medium">Город</th><th className="text-left p-3 font-medium">Рейтинг</th><th className="text-left p-3 font-medium">Заказов</th><th className="text-left p-3 font-medium">Статус</th></tr></thead>
                 <tbody>
-                  {masters.map((m: any) => (
+                  {masters.map((m: Master) => (
                     <tr key={m.userId} className="border-t">
-                      <td className="p-3"><a href={`/masters/${m.userId}`} className="font-medium hover:text-primary hover:underline">{m.fullName}</a><div className="text-xs text-muted-foreground">{m.phone}</div></td>
+                      <td className="p-3"><Link href={`/masters/${m.userId}`} className="font-medium hover:text-primary hover:underline">{m.fullName}</Link><div className="text-xs text-muted-foreground">{m.phone}</div></td>
                       <td className="p-3">{m.city || '—'}</td>
-                      <td className="p-3"><span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />{m.rating}</span></td>
+                      <td className="p-3"><span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />{String(m.rating)}</span></td>
                       <td className="p-3">{m.totalOrders}</td>
                       <td className="p-3">{m.isModerated ? <span className="text-xs text-emerald-600 font-medium">✅ Проверен</span> : <span className="text-xs text-amber-600 font-medium">⏳ На проверке</span>}</td>
                     </tr>
@@ -254,5 +232,4 @@ export default function AdminPage() {
     </div>
     <OrderDetailModal order={selectedOrder} open={!!selectedOrder} onClose={() => setSelectedOrder(null)} />
   </>);
-
 }

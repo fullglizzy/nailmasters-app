@@ -1,18 +1,10 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { DesignCard } from '@/components/design/design-card';
-
-interface DesignListItem {
-  id: string;
-  title: string;
-  images?: string[];
-  videoUrl?: string | null;
-  likesCount?: number;
-  isLiked?: boolean;
-  tags?: string[];
-}
+import { useDesigns } from '@/hooks/api';
+import { useLikedIds } from '@/hooks/use-liked-ids';
 
 const FEATURED_TAGS = [
   { key: 'all', label: 'Всё' },
@@ -25,24 +17,18 @@ const FEATURED_TAGS = [
 ];
 
 export default function HomePage() {
-  const [items, setItems] = useState<DesignListItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
   const router = useRouter();
   const selectedTag = searchParams.get('tag') || 'all';
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch('/api/designs?page=1&limit=40&includeOwn=true&sort=popular');
-        const json = await res.json();
-        if (json.success && json.data) setItems(json.data);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, []);
+  const { data: items = [], isLoading } = useDesigns({
+    sort: 'popular',
+    includeOwn: true,
+    limit: 40,
+  });
+
+  // Batch load liked state — 1 API call for all cards, not N
+  const likedIds = useLikedIds();
 
   const filtered = useMemo(() => {
     if (selectedTag === 'all') return items;
@@ -51,7 +37,7 @@ export default function HomePage() {
     );
   }, [items, selectedTag]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="mx-auto max-w-7xl px-4 pt-6 pb-8">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -65,8 +51,6 @@ export default function HomePage() {
 
   return (
     <div>
-      {/* ── Hero masthead (temporarily hidden) ── */}
-
       {/* ── Tag chips ── */}
       <section className="border-y border-border/50">
         <div className="mx-auto max-w-7xl px-4 py-4">
@@ -106,6 +90,7 @@ export default function HomePage() {
               <DesignCard
                 key={d.id}
                 design={d}
+                isLiked={likedIds.has(d.id)}
                 delay={Math.min(i * 40, 600)}
               />
             ))}

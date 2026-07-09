@@ -2,21 +2,18 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Search, Plus, User, Play, Shield, MessageCircle } from 'lucide-react';
+import { Home, Search, Plus, User, Bell, Shield } from 'lucide-react';
 import { useAuthState } from '@/components/providers/guest-provider';
-import { useUnreadMessages } from '@/hooks/use-unread-messages';
 
 export function BottomNavigation() {
   const pathname = usePathname();
-  const { role } = useAuthState();
-  const unreadMessages = useUnreadMessages();
+  const { role, isGuest } = useAuthState();
 
   const items = [
     { href: '/', icon: Home, label: 'Главная' },
     { href: '/search', icon: Search, label: 'Поиск' },
     { href: '/create', icon: Plus, label: 'Создать' },
-    { href: '/explore', icon: Play, label: 'Лента' },
-    //{ href: '/messages', icon: MessageCircle, label: 'Чаты' },
+    ...(isGuest ? [] : [{ href: '/notifications', icon: Bell, label: 'Уведомления' }]),
     ...(role === 'admin' ? [{ href: '/admin', icon: Shield, label: 'Админ' }] : []),
     { href: '/profile', icon: User, label: 'Профиль' },
   ];

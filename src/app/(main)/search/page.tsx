@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { DesignCard } from '@/components/design/design-card';
 import { MasterCard } from '@/components/master/master-card';
+import { useDesigns } from '@/hooks/api';
+import { useLikedIds } from '@/hooks/use-liked-ids';
 import { AVAILABLE_COLORS } from '@/data/colors';
 
 /* ───────────────────────────────────────────
@@ -48,6 +50,7 @@ interface MasterItem {
    ─────────────────────────────────────────── */
 export default function SearchPage() {
   const router = useRouter();
+  const likedIds = useLikedIds();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
@@ -58,6 +61,13 @@ export default function SearchPage() {
   const [masters, setMasters] = useState<MasterItem[]>([]);
   const [didSearch, setDidSearch] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+
+  // RQ for designs
+  const { data: rqDesigns, isLoading: dLoading } = useDesigns(
+    committedQuery && didSearch
+      ? { search: committedQuery, limit: 40, includeOwn: true }
+      : { limit: 0 },
+  );
 
   /* Design filters */
   const [designFilters, setDesignFilters] = useState({
@@ -110,32 +120,44 @@ export default function SearchPage() {
     setMasterFilters({ specialties: [], city: '', minRating: '', minPrice: '', maxPrice: '', minAge: '', maxAge: '', minExperienceYears: '', sterilizationTags: [], availability: '', workFormat: [] });
   };
 
-  /* ── Fetch results ── */
+  /* ── Sync RQ designs → local state ── */
   useEffect(() => {
-    if (!committedQuery || !didSearch) { setDesigns([]); setMasters([]); return; }
+    if (!didSearch) return;
+    const d = (rqDesigns || []) as DesignItem[];
+    setDesigns(d);
+  }, [rqDesigns, didSearch]);
+
+  /* ── Fetch masters via /api/masters/search (dedicated endpoint) ── */
+  useEffect(() => {
+    if (!committedQuery || !didSearch) { setMasters([]); return; }
     let cancelled = false;
-    const fetchResults = async () => {
-      setLoading(true);
-      try {
-        const [dRes, mRes] = await Promise.all([
-          fetch(`/api/designs/search?search=${encodeURIComponent(committedQuery)}&limit=40&includeOwn=true`).then(r => r.json()),
-          fetch('/api/masters?limit=100').then(r => r.json()),
-        ]);
+    setLoading(true);
+    fetch(`/api/masters/search?q=${encodeURIComponent(committedQuery)}&limit=100`)
+      .then(r => r.json())
+      .then(json => {
         if (cancelled) return;
-        const designsData = (dRes.success ? (dRes.data?.designs || dRes.data || []) : []);
-        setDesigns(Array.isArray(designsData) ? designsData : []);
-        const mastersData = (mRes.success && mRes.data ? mRes.data : []).filter((m: MasterItem) => {
-          const hay = `${m.fullName || ''} ${m.username || ''} ${(m.specialties || []).join(' ')}`.toLowerCase();
-          return hay.includes(committedQuery.toLowerCase());
-        });
-        setMasters(mastersData);
-        if (designsData.length > 0 && mastersData.length === 0) setActiveTab('designs');
-        else if (designsData.length === 0 && mastersData.length > 0) setActiveTab('masters');
-      } finally { if (!cancelled) setLoading(false); }
-    };
-    fetchResults();
+        const data = json.success && json.data ? json.data : {};
+        const list: MasterItem[] = Array.isArray(data.masters) ? data.masters : Array.isArray(data) ? data : [];
+        setMasters(list);
+        if (designs.length === 0 && list.length > 0) setActiveTab('masters');
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [committedQuery, didSearch]);
+
+  // Loading = RQ loading OR masters fetch loading
+  const isSearchLoading = dLoading || loading;
+
+  // Auto-switch to tab with results
+  useEffect(() => {
+    if (!didSearch || dLoading || loading) return;
+    const dc = (rqDesigns || []).length;
+    const mc = masters.length;
+    if (dc > 0 && mc === 0) setActiveTab('designs');
+    else if (dc === 0 && mc > 0) setActiveTab('masters');
+  }, [didSearch, dLoading, loading, rqDesigns, masters]);
 
   /* ── Dynamic filter options ── */
   const availableDesignFilters = useMemo(() => ({
@@ -668,7 +690,7 @@ export default function SearchPage() {
             )}
 
             {/* ── Results content ── */}
-            {loading ? (
+            {isSearchLoading ? (
               /* Skeleton loading */
               <div className={activeTab === 'designs' ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4' : 'grid gap-4 md:grid-cols-2'}>
                 {Array.from({ length: activeTab === 'designs' ? 8 : 4 }).map((_, i) => (
@@ -708,7 +730,7 @@ export default function SearchPage() {
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 pb-6">
                   {filteredDesigns.map((d, i) => (
-                    <DesignCard key={d.id} design={d} delay={Math.min(i * 30, 300)} />
+                    <DesignCard key={d.id} design={d} delay={Math.min(i * 30, 300)} isLiked={likedIds.has(d.id)} />
                   ))}
                 </div>
               )

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { Star, MapPin, Award, Shield, Sparkles, Clock } from 'lucide-react';
 import { DistanceBadge } from '@/components/shared/distance-badge';
 
@@ -51,7 +52,7 @@ export function MasterCard({ master, delay, clientLat, clientLon }: MasterCardPr
         {/* Avatar with accent ring */}
         <div className="relative shrink-0">
           {master.avatarUrl ? (
-            <img src={master.avatarUrl} alt="" className="h-[52px] w-[52px] rounded-full object-cover ring-2 ring-primary/[0.08] group-hover:ring-primary/20 transition-all duration-300 shrink-0" />
+            <Image src={master.avatarUrl} alt="" width={52} height={52} className="rounded-full object-cover ring-2 ring-primary/[0.08] group-hover:ring-primary/20 transition-all duration-300 shrink-0" />
           ) : (
             <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-primary/[0.06] ring-2 ring-primary/[0.08] group-hover:ring-primary/20 transition-all duration-300 shrink-0">
               <span className="font-display text-xl text-primary">{master.fullName.charAt(0).toUpperCase()}</span>

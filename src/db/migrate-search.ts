@@ -17,11 +17,12 @@ async function main() {
     await sql.unsafe(migrationSql);
     console.log('✅ Full-text search migration applied successfully');
 
-  } catch (err: any) {
-    if (err.message?.includes('already exists')) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('already exists')) {
       console.log('✅ Migration already applied, skipping');
     } else {
-      console.error('Migration failed:', err.message);
+      console.error('Migration failed:', message);
       process.exit(1);
     }
   } finally {

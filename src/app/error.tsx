@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 
 export default function ErrorPage({
   error,
@@ -32,12 +33,12 @@ export default function ErrorPage({
           >
             Попробовать снова
           </button>
-          <a
+          <Link
             href="/"
             className="inline-flex h-10 items-center rounded-full border border-border/60 px-6 text-sm font-medium hover:bg-surface transition-colors"
           >
             На главную
-          </a>
+          </Link>
         </div>
       </div>
     </div>

@@ -95,7 +95,6 @@ async function seed() {
   for (let i = 0; i < designData.length; i++) {
     const d = designData[i];
     const master = masterUsers[i % masterUsers.length];
-    const imageNum = (i % 5) + 1;
     const [design] = await db.insert(schema.nailDesigns).values({
       title: d.title, description: d.description,
       images: [`/uploads/designs/image-${i + 1}.jpg`, `/uploads/designs/image-${i + 2}.jpg`],

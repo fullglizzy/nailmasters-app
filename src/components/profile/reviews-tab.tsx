@@ -1,39 +1,40 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Star, MessageSquare } from 'lucide-react';
+import { useMyReviews, useMasterReviews } from '@/hooks/api';
 
-interface Rating { id: string; ratingNumber: number; description: string | null; createdAt: string; nailMasterId: string; clientId: string; masterName?: string; clientName?: string; clientAvatar?: string | null; }
+interface ReviewItem {
+  id: string;
+  ratingNumber: number;
+  description: string | null;
+  createdAt: string;
+  nailMasterId: string;
+  clientId: string;
+  masterName?: string;
+  clientName?: string;
+  clientAvatar?: string | null;
+}
 
 export function ReviewsTab() {
-  const [reviews, setReviews] = useState<Rating[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState('');
-  const [userId, setUserId] = useState('');
+  const user = typeof window !== 'undefined'
+    ? JSON.parse(localStorage.getItem('user') || '{}')
+    : { role: '', id: '' };
+  const role = user.role || '';
+  const userId = user.id || '';
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    setRole(user.role || '');
-    setUserId(user.id || '');
+  const isMaster = role === 'nailmaster';
 
-    if (user.role === 'nailmaster') {
-      // Master: show reviews clients left for THEM
-      fetch(`/api/master-rating/${user.id}`)
-        .then(r => r.json())
-        .then(json => { if (json.success) setReviews(json.data || []); })
-        .finally(() => setLoading(false));
-    } else {
-      // Client: show reviews THEY wrote (via ?clientId=)
-      fetch(`/api/master-rating?clientId=${user.id}`)
-        .then(r => r.json())
-        .then(json => { if (json.success) setReviews(json.data || []); })
-        .finally(() => setLoading(false));
-    }
-  }, []);
+  // Master: show reviews clients left for THEM
+  const { data: masterReviews = [], isLoading: masterLoading } = useMasterReviews(isMaster ? userId : undefined);
+  // Client: show reviews THEY wrote
+  const { data: clientReviews = [], isLoading: clientLoading } = useMyReviews();
 
-  if (loading) return <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
-  if (!reviews.length) return (
+  const reviews = isMaster ? (masterReviews || []) : (clientReviews || []);
+  const isLoading = isMaster ? masterLoading : clientLoading;
+  const reviewItems = reviews as ReviewItem[];
+
+  if (isLoading) return <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
+  if (!reviewItems.length) return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-muted/30">
         <MessageSquare className="h-7 w-7 text-muted-foreground/40" />
@@ -49,7 +50,7 @@ export function ReviewsTab() {
 
   return (
     <div className="space-y-3">
-      {reviews.map(r => (
+      {reviewItems.map(r => (
         <div key={r.id} className="rounded-xl border border-border/40 bg-card p-4">
           <div className="flex items-center gap-2 mb-2">
             <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-xs font-bold shrink-0">

@@ -1,7 +1,8 @@
 'use client';
 
 import { X, Clock, Palette, Scissors, Tag, Calendar, Sparkles, Gem, Heart, ShoppingBag } from 'lucide-react';
-import type { FeedDesign } from '@/hooks/use-tiktok-feed';
+import Image from 'next/image';
+import type { FeedDesign } from '@/lib/types';
 
 interface Props { design: FeedDesign; open: boolean; onClose: () => void; }
 
@@ -23,7 +24,7 @@ export function DesignDetailsModal({ design, open, onClose }: Props) {
         {/* Cover image */}
         {design.images?.[0] && (
           <div className="relative h-48 sm:h-56 overflow-hidden rounded-t-2xl">
-            <img src={design.images[0]} alt={design.title} className="w-full h-full object-cover" />
+            <Image src={design.images[0]} alt={design.title} fill sizes="(max-width: 768px) 100vw, 512px" className="object-cover" priority />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
             <button onClick={onClose} className="absolute top-3 right-3 rounded-full bg-black/40 p-1.5 text-white backdrop-blur-sm hover:bg-black/60">
               <X className="h-5 w-5" />

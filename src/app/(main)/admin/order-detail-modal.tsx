@@ -1,18 +1,10 @@
 'use client';
 
-import { X, Calendar, Clock, User, Palette, Sparkles, Star } from 'lucide-react';
+import { X, Calendar, User, Palette, Sparkles, Star } from 'lucide-react';
+import Image from 'next/image';
+import type { OrderEnriched } from '@/lib/types';
 
-interface OrderDetail {
-  id: string; status: string; price: string; requestedDateTime: string;
-  proposedDateTime?: string | null; confirmedDateTime?: string | null; completedAt?: string | null;
-  description?: string | null; clientNotes?: string | null; masterNotes?: string | null;
-  clientId: string; nailMasterId: string; masterServiceId: string;
-  serviceIds?: string[] | null; nailDesignId?: string | null;
-  _design?: { title: string; images: string[] } | null;
-  _clientName?: string; _masterName?: string;
-}
-
-interface Props { order: OrderDetail | null; open: boolean; onClose: () => void; }
+interface Props { order: OrderEnriched | null; open: boolean; onClose: () => void; }
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Ожидает', confirmed: 'Подтверждён', alternative_proposed: 'Предложено время',
@@ -40,7 +32,7 @@ export function OrderDetailModal({ order, open, onClose }: Props) {
             <span className="rounded-full bg-gold/10 text-gold px-3 py-1 text-sm font-semibold">
               {STATUS_LABELS[order.status] || order.status}
             </span>
-            <span className="text-xl font-bold text-primary">{parseInt(order.price || '0').toLocaleString()} ₽</span>
+            <span className="text-xl font-bold text-primary">{parseInt(String(order.price || '0')).toLocaleString()} ₽</span>
           </div>
 
           {/* Time */}
@@ -67,10 +59,10 @@ export function OrderDetailModal({ order, open, onClose }: Props) {
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2 mb-2"><Palette className="h-4 w-4" />Дизайн</h3>
               <a href={`/explore/${order.nailDesignId}`} className="flex items-center gap-3 bg-muted/30 rounded-lg p-3 hover:bg-accent/50 transition-colors">
-                <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0">
-                  <img src={order._design.images[0] || '/placeholder.svg'} alt="" className="h-full w-full object-cover" />
+                <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 relative bg-muted">
+                  <Image src={order._design.images?.[0] || '/placeholder.svg'} alt="" fill sizes="56px" className="object-cover" />
                 </div>
-                <span className="text-sm font-medium hover:text-primary">{order._design.title}</span>
+                <span className="text-sm font-medium hover:text-primary">{order._design.title || 'Дизайн'}</span>
               </a>
             </div>
           )}
@@ -94,12 +86,12 @@ export function OrderDetailModal({ order, open, onClose }: Props) {
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-muted-foreground shrink-0" />
               <span className="text-muted-foreground">Клиент:</span>
-              <span className="font-medium">{order._clientName || '—'}</span>
+              <span className="font-medium">{order._client?.name || '—'}</span>
             </div>
             <div className="flex items-center gap-2">
               <Star className="h-4 w-4 text-muted-foreground shrink-0" />
               <span className="text-muted-foreground">Мастер:</span>
-              <a href={`/masters/${order.nailMasterId}`} className="font-medium text-primary hover:underline">{order._masterName || '—'}</a>
+              <a href={`/masters/${order.nailMasterId}`} className="font-medium text-primary hover:underline">{order._master?.name || '—'}</a>
             </div>
           </div>
         </div>

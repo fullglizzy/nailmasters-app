@@ -1,35 +1,26 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Image from 'next/image';
+import { useQueryClient } from '@tanstack/react-query';
 import { X, Camera, Plus, Shield, Home, MapPin, Loader2, Check, AlertTriangle } from 'lucide-react';
 import { useModal } from '@/hooks/use-modal';
+import { useProfile, profileKeys } from '@/hooks/api';
 import { MASTER_SPECIALTIES, CITIES } from '@/data/specialties';
 import { shortenAddress } from '@/lib/utils';
 
 interface Props { open: boolean; onClose: () => void; onSaved: () => void; }
 
-interface ProfileData {
-  id: string; email: string; username: string; role: string;
-  fullName: string | null; phone: string | null; avatarUrl: string | null;
-  age?: number | null;
-  address?: string | null; description?: string | null; experience?: string | null;
-  city?: string | null; specialties?: string[] | null; workFormat?: string[] | null;
-  sterilization?: boolean; disposableTools?: boolean; sterilizationPhoto?: string | null;
-  latitude?: number | null; longitude?: number | null;
-}
-
 interface GeoResult { latitude: number; longitude: number; displayName: string; }
 
 export function EditProfileModal({ open, onClose, onSaved }: Props) {
   const { dialogRef, handleKeyDown } = useModal(open, onClose);
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: profile, isLoading: loading } = useProfile();
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const [fullName, setFullName] = useState('');
-  const [username, setUsername] = useState('');
-  const [phone, setPhone] = useState('');
   const [age, setAge] = useState('');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
@@ -111,43 +102,35 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
     setGeoError('');
   };
 
-  // Load profile
+  // Populate form fields when profile data arrives and modal is open
+  const prevOpen = useRef(false);
   useEffect(() => {
-    if (!open) return;
-    setLoading(true);
-    const token = localStorage.getItem('token');
-    fetch('/api/auth/profile', { headers: { Authorization: `Bearer ${token!}` } })
-      .then(r => r.json())
-      .then(json => {
-        if (json.success) {
-          const p = json.data;
-          setProfile(p);
-          setFullName(p.fullName || '');
-          setUsername(p.username || '');
-          setPhone(p.phone || '');
-          setAge(p.age ? String(p.age) : '');
-          setLocation(p.address || '');
-          setDescription(p.description || '');
-          setExperience(p.experience || '');
-          setCity(p.city || '');
-          setSpecialties(p.specialties || []);
-          setWorkFormat(p.workFormat || []);
-          setSterilization(p.sterilization || false);
-          setDisposableTools(p.disposableTools || false);
-          initialLocation.current = p.address || '';
-          initialCity.current = p.city || '';
-          // If master already has coords, show as validated
-          if (p.latitude && p.longitude && p.address) {
-            setGeoResult({
-              latitude: Number(p.latitude),
-              longitude: Number(p.longitude),
-              displayName: [p.city, p.address].filter(Boolean).join(', '),
-            });
-          }
-        }
-      })
-      .finally(() => setLoading(false));
-  }, [open]);
+    if (!open || !profile || loading) return;
+    // Only populate on modal open transition, not on every profile refetch
+    if (!prevOpen.current) {
+      const p = profile;
+      setFullName(p.fullName || '');
+      setAge(p.age ? String(p.age) : '');
+      setLocation(p.address || '');
+      setDescription(p.description || '');
+      setExperience(p.experience || '');
+      setCity(p.city || '');
+      setSpecialties(p.specialties || []);
+      setWorkFormat(p.workFormat || []);
+      setSterilization(p.sterilization || false);
+      setDisposableTools(p.disposableTools || false);
+      initialLocation.current = p.address || '';
+      initialCity.current = p.city || '';
+      if (p.latitude && p.longitude && p.address) {
+        setGeoResult({
+          latitude: Number(p.latitude),
+          longitude: Number(p.longitude),
+          displayName: [p.city, p.address].filter(Boolean).join(', '),
+        });
+      }
+    }
+    prevOpen.current = open;
+  }, [open, profile, loading]);
 
   const isMaster = profile?.role === 'nailmaster';
 
@@ -167,7 +150,7 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
 
     const token = localStorage.getItem('token');
     try {
-      const baseBody: Record<string, unknown> = { fullName, username, age: age ? Number(age) : undefined, phone: phone || undefined };
+      const baseBody: Record<string, unknown> = { fullName, age: age ? Number(age) : undefined };
 
       if (isMaster) {
         Object.assign(baseBody, {
@@ -198,7 +181,7 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
       const res = await fetch('/api/auth/avatar', { method: 'PUT', headers: { Authorization: `Bearer ${token!}` }, body: fd });
       const json = await res.json();
       if (json.success) {
-        setProfile(prev => prev ? { ...prev, avatarUrl: json.data.avatarUrl } : prev);
+        queryClient.invalidateQueries({ queryKey: profileKeys.all });
         onSaved();
       }
     } catch {}
@@ -239,7 +222,7 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
             <div className="flex justify-center">
               <label className="relative cursor-pointer group">
                 <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary overflow-hidden border-2 border-border/40">
-                  {profile?.avatarUrl ? <img src={profile.avatarUrl} alt="" className="h-full w-full object-cover" /> : (fullName || username).charAt(0).toUpperCase()}
+                  {profile?.avatarUrl ? <Image src={profile.avatarUrl} alt="" width={80} height={80} className="h-full w-full object-cover" /> : (fullName || '?').charAt(0).toUpperCase()}
                 </div>
                 <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <Camera className="h-5 w-5 text-white" />
@@ -249,26 +232,14 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
             </div>
 
             {/* Common fields */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium mb-1.5">Имя пользователя</label>
-                <input value={username} onChange={e => setUsername(e.target.value)} className={inputClass} placeholder="username" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1.5">Полное имя</label>
-                <input value={fullName} onChange={e => setFullName(e.target.value)} className={inputClass} placeholder="Иван Иванов" />
-              </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5">Полное имя</label>
+              <input value={fullName} onChange={e => setFullName(e.target.value)} className={inputClass} placeholder="Иван Иванов" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium mb-1.5">Телефон</label>
-                <input value={phone} onChange={e => setPhone(e.target.value)} className={inputClass} placeholder="+79000000000" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1.5">Возраст</label>
-                <input value={age} onChange={e => setAge(e.target.value)} type="number" min="14" max="120" className={inputClass} placeholder="25" />
-              </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5">Возраст</label>
+              <input value={age} onChange={e => setAge(e.target.value)} type="number" min="14" max="120" className={inputClass} placeholder="25" />
             </div>
 
             {/* Master-specific fields */}
@@ -417,13 +388,6 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
                   </div>
                 </div>
               </>
-            )}
-
-            {!isMaster && (
-              <div>
-                <label className="block text-xs font-medium mb-1.5">Адрес</label>
-                <input value={location} onChange={e => setLocation(e.target.value)} className={inputClass} placeholder="Город, улица" />
-              </div>
             )}
 
             <div className="flex gap-3 pt-4 border-t">

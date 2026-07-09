@@ -21,10 +21,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ mast
     conditions.push(inArray(schema.nailDesigns.id, [...canDoMap.keys()]));
   } else {
     if (canDoLinks.length > 0) {
-      conditions.push(or(
-        eq(schema.nailDesigns.uploadedByMasterId, masterId),
-        inArray(schema.nailDesigns.id, [...canDoMap.keys()]),
-      ) as any);
+      conditions.push(
+        or(
+          eq(schema.nailDesigns.uploadedByMasterId, masterId),
+          inArray(schema.nailDesigns.id, [...canDoMap.keys()]),
+        )!,
+      );
     } else {
       conditions.push(eq(schema.nailDesigns.uploadedByMasterId, masterId));
     }

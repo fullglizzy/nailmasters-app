@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Sparkles, User, Users, Shield, Palette, ShoppingBag, Star, Search, Heart, Play, ChevronDown, ChevronUp, ExternalLink, Clipboard, Zap } from 'lucide-react';
+import { Sparkles, User, Users, Shield, Star, ExternalLink, Clipboard, Zap } from 'lucide-react';
 
 export default function ClientInfoPage() {
   return (

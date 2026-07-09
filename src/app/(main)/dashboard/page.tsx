@@ -3,47 +3,27 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Users, ShoppingBag, Image, Star, TrendingUp, Calendar, Settings, Shield } from 'lucide-react';
-
-interface AdminStats {
-  totalUsers: number;
-  totalMasters: number;
-  totalClients: number;
-  totalDesigns: number;
-  totalOrders: number;
-  activeOrders: number;
-  revenue: number;
-}
+import { Users, ShoppingBag, Image, Star, Calendar, Settings } from 'lucide-react';
+import { useAdminStats } from '@/hooks/api';
 
 export default function DashboardPage() {
   const [role, setRole] = useState<string | null>(null);
-  const [stats, setStats] = useState<AdminStats | null>(null);
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     const userStr = localStorage.getItem('user');
     if (!token || !userStr) { router.push('/auth'); return; }
-
     const user = JSON.parse(userStr);
     setRole(user.role);
+  }, [router]);
 
-    if (user.role === 'admin') {
-      fetch('/api/admin/stats', { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(j => { if (j.success) setStats(j.data); })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
-  }, []);
+  const { data: stats, isLoading: statsLoading } = useAdminStats();
 
-  if (loading) {
+  if (role === null || (role === 'admin' && statsLoading)) {
     return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
   }
 
-  const StatIconClass = 'h-4 w-4';
   const iconWrapperClass = 'flex h-11 w-11 items-center justify-center rounded-xl bg-primary/[0.06]';
   const iconClass = 'h-5 w-5 text-primary';
 
@@ -81,7 +61,7 @@ export default function DashboardPage() {
               { label: 'Пользователи', href: '/dashboard/users', icon: Users },
               { label: 'Дизайны (модерация)', href: '/dashboard/designs', icon: Image },
               { label: 'Заказы', href: '/dashboard/orders', icon: ShoppingBag },
-              { label: 'Мастера', href: '/masters', icon: Star },
+              { label: 'Поиск мастеров', href: '/search', icon: Star },
               { label: 'Настройки', href: '/profile', icon: Settings },
             ].map(item => (
               <Link key={item.href} href={item.href}

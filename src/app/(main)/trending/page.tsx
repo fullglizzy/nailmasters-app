@@ -1,25 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { DesignCard } from '@/components/design/design-card';
-
-interface Design {
-  id: string; title: string; images: string[]; likesCount: number; ordersCount: number;
-}
+import { usePopularDesigns } from '@/hooks/api';
+import { useLikedIds } from '@/hooks/use-liked-ids';
 
 export default function TrendingPage() {
-  const [designs, setDesigns] = useState<Design[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: designs = [], isLoading } = usePopularDesigns();
+  const likedIds = useLikedIds();
 
-  useEffect(() => {
-    fetch('/api/designs/popular')
-      .then(r => r.json())
-      .then(j => { if (j.success) setDesigns(j.data); })
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
+  if (isLoading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
 
   return (
     <div className="min-h-screen py-8 px-4">
@@ -39,7 +29,7 @@ export default function TrendingPage() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {designs.map((d, i) => (
-              <DesignCard key={d.id} design={d} rank={i + 1} href={`/explore/${d.id}`} />
+              <DesignCard key={d.id} design={d} rank={i + 1} href={`/explore/${d.id}`} isLiked={likedIds.has(d.id)} />
             ))}
           </div>
         )}

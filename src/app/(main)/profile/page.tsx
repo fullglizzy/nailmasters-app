@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { User, Heart, Calendar, LogOut, Upload, Star, Clock, ShoppingBag, Grid3X3, Edit, MessageSquare, Eye, Sparkles } from 'lucide-react';
 import { FavoritesTab } from '@/components/profile/favorites-tab';
 import { BookingsTab } from '@/components/profile/bookings-tab';
@@ -11,49 +12,31 @@ import { ReviewsTab } from '@/components/profile/reviews-tab';
 import { EditProfileModal } from '@/components/profile/edit-profile-modal';
 import { DesignCard } from '@/components/design/design-card';
 import { ScrollableRow } from '@/components/shared/scrollable-row';
-
-interface UserProfile {
-  id: string; email: string; username: string; role: string; isGuest: boolean;
-  avatarUrl: string | null; fullName: string | null; phone: string | null;
-  rating?: string; totalOrders?: number; reviewsCount?: number;
-  // Master completeness fields
-  city?: string | null; address?: string | null; description?: string | null;
-  experience?: string | null; specialties?: string[] | null;
-  startingPrice?: string | null; workFormat?: string[] | null;
-  sterilization?: boolean; disposableTools?: boolean;
-}
+import { useProfile, useMasterDesigns } from '@/hooks/api';
+import { useLikedIds } from '@/hooks/use-liked-ids';
+import { clearAuth } from '@/components/providers/guest-provider';
+import type { Design, ScheduleSlot } from '@/lib/types';
 
 function ProfileContent() {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [scheduleKey, setScheduleKey] = useState(0);
-  const [designsKey, setDesignsKey] = useState(0);
   const [showMasterConfirm, setShowMasterConfirm] = useState(false);
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tab = searchParams.get('tab') || 'overview';
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) { router.push('/auth'); return; }
-    fetch('/api/auth/profile', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(json => {
-        if (json.success) setProfile(json.data);
-        else { localStorage.removeItem('token'); router.push('/auth'); }
-      })
-      .finally(() => setLoading(false));
-  }, [router]);
+  // Tab state — internal for instant switching, URL param for initial load / shareability
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'overview');
+
+  const { data: profile, isLoading, refetch } = useProfile();
 
   const handleLogout = () => {
-    ['token', 'refreshToken', 'user', 'guest_created', 'guest_likes'].forEach(k => localStorage.removeItem(k));
+    clearAuth();
     window.dispatchEvent(new Event('auth-change'));
     router.push('/');
   };
 
-  if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
+  if (isLoading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
   if (!profile) return <div className="flex min-h-screen flex-col items-center justify-center"><h1 className="font-display text-2xl mb-2">Необходима авторизация</h1><Link href="/auth" className="text-primary hover:underline font-medium">Войти</Link></div>;
 
   const isMaster = profile.role === 'nailmaster';
@@ -71,19 +54,30 @@ function ProfileContent() {
     if (!profile.workFormat?.length) masterMissing.push('формат работы');
   }
 
+  const isGuestUser = profile.isGuest;
+
   const tabs = [
     { id: 'overview', label: 'Обзор', icon: User },
     ...(isMaster ? [
       { id: 'designs', label: 'Я так могу', icon: Grid3X3 },
       { id: 'schedule', label: 'Расписание', icon: Clock },
     ] : []),
-    { id: 'orders', label: 'Записи', icon: ShoppingBag },
+    // Guests: only overview, favorites, uploads — no orders/reviews
+    ...(!isGuestUser ? [
+      { id: 'orders', label: 'Записи', icon: ShoppingBag },
+    ] : []),
     { id: 'favorites', label: 'Избранное', icon: Heart },
     { id: 'uploads', label: 'Загрузки', icon: Upload },
-    { id: 'reviews', label: 'Отзывы', icon: MessageSquare },
+    ...(!isGuestUser ? [
+      { id: 'reviews', label: 'Отзывы', icon: MessageSquare },
+    ] : []),
   ];
 
-  const switchTab = (id: string) => router.push(`/profile?tab=${id}`, { scroll: false });
+  const switchTab = (id: string) => {
+    setTab(id);
+    // Sync URL for shareability without triggering navigation
+    window.history.replaceState(null, '', `/profile?tab=${id}`);
+  };
 
   return (
     <div className="min-h-screen py-8 px-4">
@@ -93,7 +87,7 @@ function ProfileContent() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
             <div className="relative shrink-0">
               {profile.avatarUrl ? (
-                <img src={profile.avatarUrl} alt="" className="h-[72px] w-[72px] rounded-full object-cover ring-2 ring-primary/[0.08]" />
+                <Image src={profile.avatarUrl} alt="" width={72} height={72} className="rounded-full object-cover ring-2 ring-primary/[0.08]" />
               ) : (
                 <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-primary/[0.06] ring-2 ring-primary/[0.08]">
                   <span className="font-display text-3xl text-primary">{(profile.fullName || profile.username).charAt(0).toUpperCase()}</span>
@@ -110,7 +104,7 @@ function ProfileContent() {
                   <span className="inline-flex items-center gap-1 font-medium text-gold"><Star className="h-3.5 w-3.5 fill-current" />{profile.rating}</span>
                 )}
               </div>
-              
+
             </div>
             <div className="flex items-center gap-2">
               {/* Я мастер — показываем и гостям, и клиентам */}
@@ -203,7 +197,7 @@ function ProfileContent() {
         <div className="min-h-[300px]">
           {tab === 'orders' && <BookingsTab />}
           {tab === 'favorites' && <FavoritesTab />}
-          {isMaster && tab === 'designs' && <MasterDesignsTab key={designsKey} />}
+          {isMaster && tab === 'designs' && <MasterDesignsTab userId={profile.id} />}
           {isMaster && tab === 'schedule' && <MasterScheduleTab key={scheduleKey} onAdd={async (date, start, end) => {
             const token = localStorage.getItem('token');
             await fetch('/api/masters/schedule', {
@@ -288,31 +282,20 @@ function ProfileContent() {
       <EditProfileModal
         open={editOpen}
         onClose={() => setEditOpen(false)}
-        onSaved={async () => {
-          const token = localStorage.getItem('token');
-          const res = await fetch('/api/auth/profile', { headers: { Authorization: `Bearer ${token!}` } });
-          const json = await res.json();
-          if (json.success) setProfile(json.data);
-        }}
+        onSaved={() => refetch()}
       />
     </div>
   );
 }
 
-// Simple master sub-tabs
-function MasterDesignsTab() {
-  const [designs, setDesigns] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    fetch(`/api/designs/master/${user.id}?source=can-do`, { headers: { Authorization: `Bearer ${token!}` } })
-      .then(r => r.json())
-      .then(j => { if (j.success) setDesigns(j.data || []); })
-      .finally(() => setLoading(false));
-  }, []);
-  if (loading) return <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
-  if (!designs.length) return (
+// Master "Я так могу" tab
+function MasterDesignsTab({ userId }: { userId: string }) {
+  const { data: designs = [], isLoading } = useMasterDesigns(userId, 'can-do');
+  const designList = (designs || []) as Design[];
+  const likedIds = useLikedIds();
+
+  if (isLoading) return <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
+  if (!designList.length) return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-muted/30">
         <Grid3X3 className="h-7 w-7 text-muted-foreground/40" />
@@ -321,11 +304,12 @@ function MasterDesignsTab() {
       <Link href="/create" className="mt-3 rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">Создать дизайн</Link>
     </div>
   );
-  return <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">{designs.map((d: any, i: number) => <DesignCard key={d.id} design={d} delay={Math.min(i * 30, 300)} />)}</div>;
+  return <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">{designList.map((d: Design, i: number) => <DesignCard key={d.id} design={d} delay={Math.min(i * 30, 300)} isLiked={likedIds.has(d.id)} />)}</div>;
 }
 
+// Master schedule management tab
 function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: string, end: string) => Promise<void>; onDelete?: (slotId: string) => Promise<void> }) {
-  const [slots, setSlots] = useState<any[]>([]);
+  const [slots, setSlots] = useState<ScheduleSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -363,8 +347,8 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
 
   if (loading) return <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
 
-  const grouped: Record<string, any[]> = {};
-  slots.forEach((s: any) => { (grouped[s.workDate] ??= []).push(s); });
+  const grouped: Record<string, ScheduleSlot[]> = {};
+  slots.forEach((s) => { (grouped[s.workDate] ??= []).push(s); });
 
   const inputClass = "rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all";
 
@@ -482,7 +466,7 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
             <div key={date} className="rounded-xl border border-border/40 bg-card p-4">
               <div className="font-semibold text-sm mb-3">{new Date(date).toLocaleDateString('ru', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
               <div className="flex flex-wrap gap-2">
-                {items.map((s: any) => {
+                {items.map((s) => {
                   const isDeleting = deletingId === s.id;
                   return isDeleting ? (
                     <span key={s.id} className="inline-flex items-center gap-2 rounded-full bg-destructive/10 border border-destructive/20 px-3 py-1.5 text-xs font-medium animate-in fade-in zoom-in-95 duration-150">

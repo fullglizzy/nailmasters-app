@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { Star, MapPin, Award, Shield, Clock, Phone, ArrowLeft, Heart, Sparkles, Calendar, Check, MessageCircle } from 'lucide-react';
 import { BookingModal } from '@/components/booking/booking-modal';
 import { DesignCard } from '@/components/design/design-card';
@@ -11,24 +13,13 @@ import { MapHeader } from '@/components/shared/map-header';
 import { DistanceBadge } from '@/components/shared/distance-badge';
 import { useGeolocation } from '@/hooks/use-geolocation';
 import { formatDisplayAddress } from '@/lib/utils';
-
-interface MasterProfile {
-  userId: string; fullName: string; description: string | null; city: string | null;
-  rating: string; totalOrders: number; reviewsCount: number; specialties: string[] | null;
-  startingPrice: string | null; experience: string | null; workFormat: string[] | null;
-  sterilization: boolean; disposableTools: boolean; phone: string;
-  address?: string | null; latitude?: number | null; longitude?: number | null;
-  services: { id: string; name: string; price: string; duration: number }[];
-}
-
-interface Design { id: string; title: string; images: string[]; likesCount: number; }
+import { useMaster, useMasterDesigns, useMasterReviews, masterKeys } from '@/hooks/api';
+import { useLikedIds } from '@/hooks/use-liked-ids';
+import type { Design, Rating } from '@/lib/types';
 
 export default function MasterProfilePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [master, setMaster] = useState<MasterProfile | null>(null);
-  const [designs, setDesigns] = useState<Design[]>([]);
-  const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
   const bookDesignId = searchParams.get('bookDesign');
   const [showBooking, setShowBooking] = useState(!!bookDesignId);
@@ -45,19 +36,14 @@ export default function MasterProfilePage() {
   // Запрашиваем геолокацию при загрузке страницы
   useEffect(() => { requestGeo(); }, []);
 
-  useEffect(() => {
-    if (!id) return;
-    Promise.all([
-      fetch(`/api/masters/profile/${id}`).then((r) => r.json()),
-      fetch(`/api/designs/master/${id}`).then((r) => r.json()),
-    ]).then(([masterJson, designsJson]) => {
-      if (masterJson.success) setMaster(masterJson.data);
-      if (designsJson.success) setDesigns(designsJson.data || []);
-    }).finally(() => setLoading(false));
-  }, [id]);
+  // React Query hooks
+  const { data: master, isLoading: masterLoading } = useMaster(id);
+  const { data: _designs, isLoading: designsLoading } = useMasterDesigns(id);
+  const designs = (_designs as Design[]) || [];
+  const likedIds = useLikedIds();
 
   /* ── Loading skeleton ── */
-  if (loading) return (
+  if (masterLoading) return (
     <div className="min-h-screen py-8 px-4">
       <div className="mx-auto max-w-4xl space-y-6">
         <div className="h-4 w-48 skeleton rounded-full" />
@@ -91,8 +77,8 @@ export default function MasterProfilePage() {
       </div>
       <h1 className="font-display text-2xl mb-2">Мастер не найден</h1>
       <p className="text-muted-foreground mb-6 text-sm">Возможно, страница была удалена или указан неверный адрес</p>
-      <Link href="/masters" className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
-        К каталогу мастеров
+      <Link href="/search" className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
+        К поиску мастеров
       </Link>
     </div>
   );
@@ -113,19 +99,21 @@ export default function MasterProfilePage() {
 
   return (
     <div className="min-h-screen">
-      {/* ── Map header background ── */}
-      <MapHeader
-        latitude={master.latitude}
-        longitude={master.longitude}
-        label={formatDisplayAddress(master.address, master.city) || undefined}
-      >
-        <DistanceBadge
-          masterLat={master.latitude}
-          masterLon={master.longitude}
-          clientLat={clientCoords?.latitude}
-          clientLon={clientCoords?.longitude}
-        />
-      </MapHeader>
+      {/* ── Map header background — only if address is set ── */}
+      {master.latitude != null && master.longitude != null && (
+        <MapHeader
+          latitude={master.latitude}
+          longitude={master.longitude}
+          label={formatDisplayAddress(master.address, master.city) || undefined}
+        >
+          <DistanceBadge
+            masterLat={master.latitude}
+            masterLon={master.longitude}
+            clientLat={clientCoords?.latitude}
+            clientLon={clientCoords?.longitude}
+          />
+        </MapHeader>
+      )}
 
       <div className="py-8 px-4">
       <div className="mx-auto max-w-4xl">
@@ -143,8 +131,8 @@ export default function MasterProfilePage() {
           <div className="flex flex-col sm:flex-row gap-6">
             {/* Avatar */}
             <div className="relative shrink-0">
-              {(master as any).avatarUrl ? (
-                <img src={(master as any).avatarUrl} alt={master.fullName} className="h-[88px] w-[88px] rounded-full object-cover ring-2 ring-primary/[0.08]" />
+              {master.avatarUrl ? (
+                <Image src={master.avatarUrl} alt={master.fullName} width={88} height={88} className="rounded-full object-cover ring-2 ring-primary/[0.08]" />
               ) : (
                 <div className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-primary/[0.06] ring-2 ring-primary/[0.08]">
                   <span className="font-display text-[40px] text-primary">{master.fullName.charAt(0).toUpperCase()}</span>
@@ -206,7 +194,7 @@ export default function MasterProfilePage() {
                       onClick={() => setShowBooking(true)}
                       className="flex-1 rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg"
                     >
-                      Записаться{master.startingPrice ? ` · от ${parseInt(master.startingPrice).toLocaleString('ru-RU')} ₽` : ''}
+                      Записаться{master.startingPrice ? ` · от ${parseInt(String(master.startingPrice)).toLocaleString('ru-RU')} ₽` : ''}
                     </button>
                   </div>
                 )}
@@ -256,14 +244,14 @@ export default function MasterProfilePage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {designs.map((d, i) => (
-                <DesignCard key={d.id} design={d} href={`/explore/${d.id}`} delay={Math.min(i * 40, 300)} />
+                <DesignCard key={d.id} design={d} href={`/explore/${d.id}`} delay={Math.min(i * 40, 300)} isLiked={likedIds.has(d.id)} />
               ))}
             </div>
           </section>
         )}
 
         {/* ── Empty portfolio ── */}
-        {designs.length === 0 && !loading && master && (
+        {designs.length === 0 && !designsLoading && master && (
           <section className="mb-8">
             <div className="mb-4">
               <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-1">Портфолио</p>
@@ -298,18 +286,25 @@ export default function MasterProfilePage() {
   );
 }
 
+// ── Enriched rating returned by the master-rating API ──
+interface EnrichedRating extends Rating {
+  clientName?: string;
+  clientAvatar?: string;
+}
+
 function MasterReviews({ masterId, onReviewClick, refreshKey }: { masterId: string; onReviewClick: () => void; refreshKey?: number }) {
-  const [reviews, setReviews] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: _reviews = [], isLoading } = useMasterReviews(masterId);
+  const reviews = _reviews as EnrichedRating[];
 
+  // Invalidate and re-fetch reviews when refreshKey changes (e.g. after a review is submitted)
   useEffect(() => {
-    fetch(`/api/master-rating/${masterId}`)
-      .then(r => r.json())
-      .then(j => { if (j.success) setReviews(j.data || []); })
-      .finally(() => setLoading(false));
-  }, [masterId, refreshKey]);
+    if (refreshKey) {
+      queryClient.invalidateQueries({ queryKey: masterKeys.reviews(masterId) });
+    }
+  }, [refreshKey, masterId, queryClient]);
 
-  if (loading) return <div className="flex justify-center py-6"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
+  if (isLoading) return <div className="flex justify-center py-6"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
 
   return (
     <section className="mb-8">
@@ -334,11 +329,11 @@ function MasterReviews({ masterId, onReviewClick, refreshKey }: { masterId: stri
         </div>
       ) : (
       <div className="space-y-3">
-        {reviews.slice(0, 10).map((r: any) => (
+        {reviews.slice(0, 10).map((r) => (
           <div key={r.id} className="rounded-xl border border-border/40 bg-card p-4">
             <div className="flex items-center gap-2 mb-2">
               {r.clientAvatar ? (
-                <img src={r.clientAvatar} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                <Image src={r.clientAvatar} alt="" width={32} height={32} className="rounded-full object-cover shrink-0" />
               ) : (
                 <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-xs font-bold shrink-0">
                   {(r.clientName || '?').charAt(0)}
