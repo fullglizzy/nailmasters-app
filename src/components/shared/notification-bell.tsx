@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -9,20 +9,17 @@ interface Notification { id: string; type: string; title: string; message: strin
 export function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const prevCountRef = useRef(0);
 
-  const fetchNotifs = () => {
+  const fetchNotifs = useCallback(() => {
     const token = localStorage.getItem('token');
     if (!token) return;
     fetch('/api/notifications', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(json => {
         if (json.success) {
-          const list = json.data || [];
+          const list: Notification[] = json.data || [];
           setNotifications(list);
-          setUnreadCount(list.length);
-          // Toast for new notifications
           if (list.length > prevCountRef.current) {
             const latest = list[0];
             if (latest) toast(latest.title, { description: latest.message });
@@ -31,12 +28,40 @@ export function NotificationBell() {
         }
       })
       .catch(() => {});
-  };
+  }, []);
 
+  // Первичная загрузка
+  useEffect(() => { fetchNotifs(); }, [fetchNotifs]);
+
+  // SSE: реальное время
   useEffect(() => {
-    fetchNotifs();
-    const interval = setInterval(fetchNotifs, 15000); // 15s
-    return () => clearInterval(interval);
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const es = new EventSource(`/api/notifications/stream?token=${encodeURIComponent(token)}`);
+
+    es.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'notification' && msg.data?.id) {
+          setNotifications(prev => {
+            if (prev.some(n => n.id === msg.data.id)) return prev; // уже есть
+            const next = [{ id: msg.data.id, type: msg.data.type, title: msg.data.title, message: msg.data.message, createdAt: msg.data.createdAt, isRead: false }, ...prev];
+            if (next.length > prevCountRef.current) {
+              toast(msg.data.title || 'Уведомление', { description: msg.data.message || '' });
+            }
+            prevCountRef.current = next.length;
+            return next;
+          });
+        }
+      } catch { /* ignore */ }
+    };
+
+    es.onerror = () => {
+      // EventSource сам переподключается — ничего не делаем
+    };
+
+    return () => es.close();
   }, []);
 
   const markRead = async (id?: string) => {
@@ -47,13 +72,13 @@ export function NotificationBell() {
     });
     if (id) {
       setNotifications(prev => prev.filter(n => n.id !== id));
-      setUnreadCount(prev => Math.max(0, prev - 1));
     } else {
       setNotifications([]);
-      setUnreadCount(0);
     }
     setOpen(false);
   };
+
+  const unreadCount = notifications.length;
 
   return (
     <div className="relative">

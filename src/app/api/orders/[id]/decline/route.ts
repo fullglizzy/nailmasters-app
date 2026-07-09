@@ -6,12 +6,20 @@ import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
 
 export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const user = (req as AuthenticatedRequest).user!;
-  if (user.role !== 'nailmaster') return errorResponse('Только мастера могут отклонять заказы', 403);
 
   const { id } = await params;
   const orders = await db.select().from(schema.orders).where(eq(schema.orders.id, id)).limit(1);
   if (!orders.length) return errorResponse('Заказ не найден', 404);
-  if (orders[0].nailMasterId !== user.userId) return errorResponse('Это не ваш заказ', 403);
+  const order = orders[0];
+
+  // Мастер отклоняет pending → declined
+  const isMasterDecline = user.role === 'nailmaster' && order.nailMasterId === user.userId && order.status === 'pending';
+  // Клиент отклоняет alternative_proposed → declined
+  const isClientDecline = user.role === 'client' && order.clientId === user.userId && order.status === 'alternative_proposed';
+
+  if (!isMasterDecline && !isClientDecline) {
+    return errorResponse('Заказ нельзя отклонить в текущем статусе', 400);
+  }
 
   await db.update(schema.orders).set({
     status: 'declined',

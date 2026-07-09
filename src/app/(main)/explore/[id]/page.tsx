@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Heart, MessageCircle, Eye, CalendarCheck, Share2, Volume2, VolumeX,
-  ChevronUp, ChevronDown, ArrowLeft, Play, Sparkles,
+  ChevronUp, ChevronDown, ArrowLeft, Play, Sparkles, X,
 } from 'lucide-react';
 import { useLike } from '@/hooks/use-like';
 import { CommentsModal } from '@/components/design/comments-modal';
@@ -39,8 +39,14 @@ export default function TikTokFeedPage() {
   const [detailsFor, setDetailsFor] = useState<FeedDesign | null>(null);
   const [mastersFor, setMastersFor] = useState<FeedDesign | null>(null);
   const [shareFor, setShareFor] = useState<FeedDesign | null>(null);
+  const [commentRefreshKey, setCommentRefreshKey] = useState(0);
+  const [canDoDesign, setCanDoDesign] = useState<string | null>(null);
 
-  const goBack = () => (window.history.length > 1 ? router.back() : router.push('/'));
+  const goBack = () => {
+    const prev = document.referrer;
+    if (prev && prev.includes(window.location.host)) router.back();
+    else router.push('/');
+  };
 
   // 1. Load designs
   useEffect(() => {
@@ -323,9 +329,9 @@ export default function TikTokFeedPage() {
                   {/* Sidebar */}
                   <div className="absolute right-5 top-[70%] -translate-y-1/2 flex flex-col gap-5 items-center z-20">
                     <LikeButton designId={design.id} likesCount={design.likesCount} />
-                    <CommentButton designId={design.id} onClick={() => setCommentsFor(design)} />
+                    <CommentButton designId={design.id} onClick={() => setCommentsFor(design)} refreshKey={commentRefreshKey} />
                     <SideBtn icon={Eye} label="Подробнее" onClick={() => setDetailsFor(design)} />
-                    <CanDoButton designId={design.id} />
+                    <CanDoButton designId={design.id} onOpen={() => setCanDoDesign(design.id)} />
                     <SideBtn icon={CalendarCheck} label="Записаться" onClick={() => setMastersFor(design)} />
                     <SideBtn icon={Share2} label="Поделиться" onClick={() => setShareFor(design)} />
                     {isVideo && <SideBtn icon={videoMuted[design.id] ? VolumeX : Volume2} label="Звук" onClick={() => toggleSound(design.id)} />}
@@ -370,10 +376,11 @@ export default function TikTokFeedPage() {
       </div>
 
       {/* Modals */}
-      {commentsFor && <CommentsModal designId={commentsFor.id} designTitle={commentsFor.title} open={!!commentsFor} onClose={() => setCommentsFor(null)} />}
+      {commentsFor && <CommentsModal designId={commentsFor.id} designTitle={commentsFor.title} open={!!commentsFor} onClose={() => setCommentsFor(null)} onCommentAdded={() => setCommentRefreshKey(k => k + 1)} />}
       {detailsFor && <DesignDetailsModal design={detailsFor} open={!!detailsFor} onClose={() => setDetailsFor(null)} />}
       {mastersFor && <MastersListModal designId={mastersFor.id} designTitle={mastersFor.title} open={!!mastersFor} onClose={() => setMastersFor(null)} />}
       {shareFor && <ShareModal open={!!shareFor} onClose={() => setShareFor(null)} title={shareFor.title} designId={shareFor.id} />}
+      {canDoDesign && <CanDoModal designId={canDoDesign} onClose={() => setCanDoDesign(null)} />}
     </div>
   );
 }
@@ -391,14 +398,14 @@ function LikeButton({ designId, likesCount: initial }: { designId: string; likes
   );
 }
 
-function CommentButton({ designId, onClick }: { designId: string; onClick: () => void }) {
+function CommentButton({ designId, onClick, refreshKey }: { designId: string; onClick: () => void; refreshKey?: number }) {
   const [count, setCount] = useState(0);
   useEffect(() => {
     fetch(`/api/designs/${designId}/comments?count=1`)
       .then(r => r.json())
       .then(json => { if (json.success && json.data) setCount(json.data.total || 0); })
       .catch(() => {});
-  }, [designId]);
+  }, [designId, refreshKey]);
   return (
     <button onClick={onClick} className="flex flex-col items-center gap-0 group">
       <div className="transition-all group-hover:scale-110 group-active:scale-95">
@@ -409,49 +416,113 @@ function CommentButton({ designId, onClick }: { designId: string; onClick: () =>
   );
 }
 
-function CanDoButton({ designId }: { designId: string }) {
+function CanDoButton({ designId, onOpen }: { designId: string; onOpen: () => void }) {
   const [role, setRole] = useState('');
   const [added, setAdded] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     setRole(user.role || '');
     if (user.role === 'nailmaster') {
-      const token = localStorage.getItem('token');
-      fetch(`/api/masters/can-do/${designId}`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(json => { if (json.success) setAdded(json.data.canDo); })
-        .catch(() => {});
+      fetch(`/api/masters/can-do/${designId}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+        .then(r => r.json()).then(json => { if (json.success) setAdded(json.data.canDo); }).catch(() => {});
     }
   }, [designId]);
 
   if (role !== 'nailmaster') return null;
 
-  const toggle = async () => {
-    setLoading(true);
-    const token = localStorage.getItem('token');
-    try {
-      if (added) {
-        await fetch(`/api/masters/can-do/${designId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-        setAdded(false);
-      } else {
-        await fetch(`/api/masters/can-do/${designId}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-        setAdded(true);
-      }
-    } catch {}
-    finally { setLoading(false); }
-  };
-
   return (
-    <button onClick={toggle} disabled={loading} className="flex flex-col items-center gap-0 group">
+    <button onClick={onOpen} className="flex flex-col items-center gap-0 group">
       <div className={`transition-all group-hover:scale-110 group-active:scale-95 ${added ? 'text-gold' : 'text-white'}`}>
-        <Sparkles className={`h-8 w-8 ${added ? 'text-gold/30' : ''}`} />
+        <Sparkles className={`h-8 w-8 ${added ? 'fill-gold/30' : ''}`} />
       </div>
       <span className="text-[9px] text-white/80 font-medium text-center leading-tight max-w-[60px]">
         {added ? 'В моих' : 'Я так могу'}
       </span>
     </button>
+  );
+}
+
+function CanDoModal({ designId, onClose }: { designId: string; onClose: () => void }) {
+  const [added, setAdded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [price, setPrice] = useState('');
+  const [duration, setDuration] = useState('');
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    fetch(`/api/masters/can-do/${designId}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(json => {
+        if (json.success) {
+          setAdded(json.data.canDo);
+          if (json.data.price) setPrice(String(json.data.price));
+          if (json.data.duration) setDuration(String(json.data.duration));
+        }
+      })
+      .catch(() => {});
+  }, [designId]);
+
+  const handleSave = async () => {
+    setLoading(true);
+    const token = localStorage.getItem('token');
+    try {
+      const body: Record<string, unknown> = {};
+      if (price) body.customPrice = String(parseInt(price) || 0);
+      if (duration) body.estimatedDuration = parseInt(duration) || 0;
+      const res = await fetch(`/api/masters/can-do/${designId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body),
+      });
+      if (res.ok) { setAdded(true); onClose(); }
+    } catch {}
+    finally { setLoading(false); }
+  };
+
+  const handleRemove = async () => {
+    setLoading(true);
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`/api/masters/can-do/${designId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      setAdded(false); setPrice(''); setDuration(''); onClose();
+    } catch {}
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="fixed inset-0 bg-black/50 animate-in fade-in duration-200" />
+      <div className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-background p-6 shadow-xl modal-enter" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="font-bold text-lg">{added ? 'Изменить условия' : 'Я так могу'}</h2>
+            <p className="text-xs text-muted-foreground">Укажите цену и время для этого дизайна</p>
+          </div>
+          <button onClick={onClose} className="rounded-full p-1.5 hover:bg-muted/50"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Цена (₽)</label>
+            <input value={price} onChange={e => setPrice(e.target.value)} type="number" min="100" placeholder="2500" autoFocus
+              className="w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Время (мин)</label>
+            <input value={duration} onChange={e => setDuration(e.target.value)} type="number" min="15" step="15" placeholder="60"
+              className="w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </div>
+        </div>
+        <div className="flex gap-2 mt-6">
+          {added && (
+            <button onClick={handleRemove} className="flex-1 rounded-full border border-destructive/30 bg-destructive/10 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/20">
+              Убрать из моих
+            </button>
+          )}
+          <button onClick={handleSave} disabled={loading} className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            {loading ? 'Сохранение...' : 'Сохранить'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

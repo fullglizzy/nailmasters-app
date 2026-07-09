@@ -44,21 +44,31 @@ export function GuestSessionProvider({ children }: { children: ReactNode }) {
     if (token) return;
     const guestCreated = localStorage.getItem('guest_created');
     if (guestCreated) return;
-    localStorage.setItem('guest_created', '1');
-    localStorage.removeItem('guest_likes'); // Clean slate for new guest
+
+    let cancelled = false;
 
     fetch('/api/auth/register-guest', { method: 'POST' })
       .then(r => r.json())
       .then(json => {
+        if (cancelled) return;
         if (json.success && json.data) {
           localStorage.setItem('token', json.data.token);
           localStorage.setItem('refreshToken', json.data.refreshToken);
           localStorage.setItem('user', JSON.stringify(json.data.user));
+          localStorage.setItem('guest_created', '1');
           readAuth();
           window.dispatchEvent(new Event('auth-change'));
+        } else {
+          // API returned error — clean up so we can retry next visit
+          localStorage.removeItem('guest_created');
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // Network error — clean up so we can retry next visit
+        if (!cancelled) localStorage.removeItem('guest_created');
+      });
+
+    return () => { cancelled = true; };
   }, [token, readAuth]);
 
   return (

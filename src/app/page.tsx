@@ -2,9 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { DesignCard } from '@/components/design/design-card';
-import { Sparkles, ArrowRight } from 'lucide-react';
 
 interface DesignListItem {
   id: string;
@@ -53,28 +51,13 @@ export default function HomePage() {
     );
   }, [items, selectedTag]);
 
-  const featured = items[0];
-
   if (loading) {
     return (
-      <div className="mx-auto max-w-7xl px-4 pt-12 pb-8 md:pt-20 md:pb-16">
-        <div className="grid gap-8 md:grid-cols-2 md:items-center">
-          <div className="space-y-6">
-            <div className="h-6 w-40 skeleton rounded-full" />
-            <div className="space-y-3">
-              <div className="h-12 w-3/4 skeleton" />
-              <div className="h-12 w-1/2 skeleton" />
-            </div>
-            <div className="space-y-2">
-              <div className="h-4 w-full skeleton" />
-              <div className="h-4 w-5/6 skeleton" />
-            </div>
-            <div className="flex gap-3">
-              <div className="h-10 w-40 skeleton rounded-full" />
-              <div className="h-10 w-36 skeleton rounded-full" />
-            </div>
-          </div>
-          <div className="aspect-[4/5] skeleton rounded-2xl" />
+      <div className="mx-auto max-w-7xl px-4 pt-6 pb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="aspect-[4/5] skeleton rounded-2xl" />
+          ))}
         </div>
       </div>
     );
@@ -82,76 +65,7 @@ export default function HomePage() {
 
   return (
     <div>
-      {/* ── Hero masthead ── */}
-      <section className="relative overflow-hidden">
-        <div className="mx-auto max-w-7xl px-4 pt-12 pb-8 md:pt-20 md:pb-16">
-          <div className="grid gap-8 md:grid-cols-2 md:items-center">
-            {/* Hero copy */}
-            <div className="space-y-6 animate-reveal" style={{ animationDelay: '0.1s' }}>
-              <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.04] px-3 py-1 text-xs font-medium text-primary">
-                <Sparkles className="h-3 w-3" />
-                Каталог дизайнов
-              </div>
-
-              <h1 className="font-display text-4xl leading-[1.1] tracking-tight md:text-5xl lg:text-6xl text-balance">
-                Искусство<br />
-                <span className="text-primary">на кончиках</span>{' '}
-                пальцев
-              </h1>
-
-              <p className="max-w-md text-base text-muted-foreground leading-relaxed">
-                Найдите свой стиль среди тысяч дизайнов, выберите мастера поблизости
-                и запишитесь на маникюр в пару касаний.
-              </p>
-
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  href="/explore"
-                  className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                  Смотреть ленту
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link
-                  href="/search"
-                  className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-sm font-medium hover:bg-surface transition-colors"
-                >
-                  Найти мастера
-                </Link>
-              </div>
-            </div>
-
-            {/* Hero visual — featured design treated as editorial art */}
-            {featured && (
-              <Link
-                href={`/explore/${featured.id}`}
-                className="group relative block animate-reveal gloss-highlight rounded-2xl overflow-hidden"
-                style={{
-                  animationDelay: '0.3s',
-                  aspectRatio: '4 / 5',
-                  maxHeight: 'min(560px, 70vh)',
-                }}
-              >
-                <img
-                  src={featured.images?.[0] || '/placeholder.svg'}
-                  alt={featured.title}
-                  fetchPriority="high"
-                  className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-5">
-                  <p className="text-xs font-medium uppercase tracking-widest text-white/60 mb-1">
-                    Выбор редакции
-                  </p>
-                  <h2 className="text-xl font-semibold text-white leading-tight">
-                    {featured.title}
-                  </h2>
-                </div>
-              </Link>
-            )}
-          </div>
-        </div>
-      </section>
+      {/* ── Hero masthead (temporarily hidden) ── */}
 
       {/* ── Tag chips ── */}
       <section className="border-y border-border/50">

@@ -13,9 +13,10 @@ export type UserRole = 'admin' | 'nailmaster' | 'client';
 // ============================================================
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
-  email: varchar('email', { length: 255 }).notNull().unique(),
-  username: varchar('username', { length: 255 }).notNull().unique(),
-  password: varchar('password', { length: 255 }).notNull(),
+  phone: varchar('phone', { length: 20 }).unique(),
+  email: varchar('email', { length: 255 }).unique(),
+  username: varchar('username', { length: 255 }).unique(),
+  password: varchar('password', { length: 255 }),
   role: varchar('role', { length: 50 }).notNull().$type<UserRole>(),
   isGuest: boolean('is_guest').default(false).notNull(),
   blocked: boolean('blocked').default(false).notNull(),

@@ -2,15 +2,18 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { Search, Filter, MapPin, Star, Award, Shield, X } from 'lucide-react';
+import { Search, Filter, MapPin, Star, Award, Shield, X, Navigation } from 'lucide-react';
 import { MastersFiltersPanel } from '@/components/master/masters-filters-panel';
 import { MasterCard } from '@/components/master/master-card';
+import { useGeolocation } from '@/hooks/use-geolocation';
+import { sortByDistance } from '@/lib/geo';
 
 interface Master {
   userId: string; fullName: string; description: string | null; city: string | null;
   rating: string; totalOrders: number; reviewsCount: number; specialties: string[] | null;
   startingPrice: string | null; experience: string | null; workFormat: string[] | null;
   sterilization: boolean; disposableTools: boolean;
+  latitude?: number | string | null; longitude?: number | string | null;
 }
 
 export default function MastersPage() {
@@ -19,8 +22,12 @@ export default function MastersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedSpecialty, setSelectedSpecialty] = useState('');
-  const [sortBy, setSortBy] = useState<'rating' | 'experience' | 'price'>('rating');
+  const [sortBy, setSortBy] = useState<'rating' | 'experience' | 'price' | 'distance'>('rating');
   const [showFilters, setShowFilters] = useState(false);
+  const { coords: clientCoords, request: requestGeo } = useGeolocation();
+  const [nearMe, setNearMe] = useState(false);
+
+  useEffect(() => { requestGeo(); }, []);
 
   useEffect(() => {
     fetch('/api/masters?limit=100')
@@ -58,21 +65,29 @@ export default function MastersPage() {
     }
 
     // Сортировка
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'rating':
-          return (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0);
-        case 'experience':
-          return (b.experience || '').localeCompare(a.experience || '');
-        case 'price':
-          return (parseFloat(a.startingPrice || '0') || 0) - (parseFloat(b.startingPrice || '0') || 0);
-        default:
-          return 0;
-      }
-    });
+    if (sortBy === 'distance' && clientCoords) {
+      // @ts-expect-error sortByDistance adds distance field to items
+      filtered = sortByDistance(filtered, clientCoords.latitude, clientCoords.longitude,
+        m => typeof m.latitude === 'string' ? parseFloat(m.latitude) : (m.latitude ?? null),
+        m => typeof m.longitude === 'string' ? parseFloat(m.longitude) : (m.longitude ?? null),
+      );
+    } else {
+      filtered.sort((a, b) => {
+        switch (sortBy) {
+          case 'rating':
+            return (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0);
+          case 'experience':
+            return (b.experience || '').localeCompare(a.experience || '');
+          case 'price':
+            return (parseFloat(a.startingPrice || '0') || 0) - (parseFloat(b.startingPrice || '0') || 0);
+          default:
+            return 0;
+        }
+      });
+    }
 
     return filtered;
-  }, [allMasters, searchQuery, selectedCity, selectedSpecialty, sortBy]);
+  }, [allMasters, searchQuery, selectedCity, selectedSpecialty, sortBy, clientCoords]);
 
   const handleFiltersApply = useCallback((filters: { city: string; specialty: string; sortBy: 'rating' | 'experience' | 'price' }) => {
     setSelectedCity(filters.city);
@@ -124,6 +139,21 @@ export default function MastersPage() {
           >
             <Filter className="h-4 w-4" />
             Фильтры
+          </button>
+          {/* Geo: «Рядом со мной» */}
+          <button
+            onClick={() => {
+              if (!clientCoords) { requestGeo(); return; }
+              setNearMe(!nearMe);
+              setSortBy(nearMe ? 'rating' : 'distance');
+            }}
+            className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${
+              nearMe ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent'
+            }`}
+            title={clientCoords ? 'Сортировать по расстоянию' : 'Определить местоположение'}
+          >
+            <Navigation className={`h-4 w-4 ${nearMe ? '' : 'text-muted-foreground'}`} />
+            Рядом
           </button>
         </div>
 
@@ -190,7 +220,7 @@ export default function MastersPage() {
         {!loading && filteredMasters.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredMasters.map((master, i) => (
-              <MasterCard key={master.userId} master={master} delay={Math.min(i * 50, 400)} />
+              <MasterCard key={master.userId} master={master} delay={Math.min(i * 50, 400)} clientLat={clientCoords?.latitude} clientLon={clientCoords?.longitude} />
             ))}
           </div>
         )}

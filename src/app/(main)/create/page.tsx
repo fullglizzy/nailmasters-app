@@ -4,7 +4,6 @@ import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Image, Video, Loader2, Sparkles, Check, Plus, Hash, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
-import { isGuest } from '@/components/auth/auth-guard-modal';
 
 /* ── Constants ── */
 const SHAPE_LABELS: Record<string, string> = {
@@ -137,25 +136,6 @@ export default function CreateDesignPage() {
 
   const inputClass = "w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all";
   const chipCls = (active: boolean) => `shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${active ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 hover:bg-surface text-muted-foreground hover:text-foreground'}`;
-
-  if (isGuest()) {
-    return (
-      <div className="min-h-screen py-8 px-4">
-        <div className="mx-auto max-w-lg text-center pt-20">
-          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gold/10">
-            <Sparkles className="h-10 w-10 text-gold" />
-          </div>
-          <h1 className="font-display text-3xl mb-3">Требуется регистрация</h1>
-          <p className="text-muted-foreground mb-8 max-w-sm mx-auto">
-            Создание дизайнов доступно только зарегистрированным пользователям. Зарегистрируйтесь, чтобы публиковать свои работы.
-          </p>
-          <Link href="/auth" className="inline-flex rounded-full bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
-            Зарегистрироваться
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   return (<>
     <div className="min-h-screen py-8 px-4">

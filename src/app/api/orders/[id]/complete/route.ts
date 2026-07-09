@@ -4,6 +4,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/response';
 import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
 import { incrementMasterOrderCount } from '@/lib/rating';
+import { logger } from '@/lib/logger';
 
 export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const user = (req as AuthenticatedRequest).user!;
@@ -43,11 +44,15 @@ export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promi
 
   // Notify client
   if (order.clientId) {
-    await db.insert(schema.notifications).values({
+    const [notif] = await db.insert(schema.notifications).values({
       type: 'order_completed', title: 'Заказ завершён',
       message: 'Мастер завершил запись. Оставьте отзыв!',
       recipientId: order.clientId, relatedOrderId: id,
-    });
+    }).returning();
+
+    if (globalThis.sendNotification) {
+      globalThis.sendNotification(order.clientId, { id: notif.id, type: 'order_completed', title: 'Заказ завершён', message: notif.message, createdAt: notif.createdAt }).catch(() => {});
+    }
   }
 
   return successResponse(null, 'Заказ завершен');

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Star, MapPin, Award, Shield, Sparkles, Clock } from 'lucide-react';
+import { DistanceBadge } from '@/components/shared/distance-badge';
 
 export interface MasterCardData {
   userId: string;
@@ -20,16 +21,24 @@ export interface MasterCardData {
   sterilization?: boolean;
   disposableTools?: boolean;
   avatarUrl?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
 }
 
 interface MasterCardProps {
   master: MasterCardData;
   delay?: number;
+  clientLat?: number | null;
+  clientLon?: number | null;
 }
 
-export function MasterCard({ master, delay }: MasterCardProps) {
+export function MasterCard({ master, delay, clientLat, clientLon }: MasterCardProps) {
   const id = master.userId || master.id || '';
   const hasHygiene = master.sterilization || master.disposableTools;
+  const getNum = (v: number | string | null | undefined): number | undefined => {
+    if (v == null) return undefined;
+    return typeof v === 'string' ? parseFloat(v) : v;
+  };
 
   return (
     <Link
@@ -70,6 +79,12 @@ export function MasterCard({ master, delay }: MasterCardProps) {
                 ({master.reviewsCount} {pluralize(master.reviewsCount, 'отзыв', 'отзыва', 'отзывов')})
               </span>
             )}
+            <DistanceBadge
+              masterLat={getNum(master.latitude)}
+              masterLon={getNum(master.longitude)}
+              clientLat={clientLat}
+              clientLon={clientLon}
+            />
           </div>
         </div>
       </div>

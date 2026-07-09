@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, Camera, Plus, Shield, Home } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Camera, Plus, Shield, Home, MapPin, Loader2, Check, AlertTriangle } from 'lucide-react';
 import { useModal } from '@/hooks/use-modal';
 import { MASTER_SPECIALTIES, CITIES } from '@/data/specialties';
+import { shortenAddress } from '@/lib/utils';
 
 interface Props { open: boolean; onClose: () => void; onSaved: () => void; }
 
@@ -16,6 +17,8 @@ interface ProfileData {
   sterilization?: boolean; disposableTools?: boolean; sterilizationPhoto?: string | null;
   latitude?: number | null; longitude?: number | null;
 }
+
+interface GeoResult { latitude: number; longitude: number; displayName: string; }
 
 export function EditProfileModal({ open, onClose, onSaved }: Props) {
   const { dialogRef, handleKeyDown } = useModal(open, onClose);
@@ -37,6 +40,76 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
   const [workFormat, setWorkFormat] = useState<string[]>([]);
   const [sterilization, setSterilization] = useState(false);
   const [disposableTools, setDisposableTools] = useState(false);
+
+  // Geo validation
+  const [geoResult, setGeoResult] = useState<GeoResult | null>(null);
+  const [geoError, setGeoError] = useState('');
+  const [addressTouched, setAddressTouched] = useState(false);
+  const initialLocation = useRef('');
+  const initialCity = useRef('');
+  const suggestTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // Address suggestions
+  const [suggestions, setSuggestions] = useState<{ displayName: string; lat: string; lon: string }[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const addressInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch address suggestions from Nominatim
+  const fetchSuggestions = useCallback(async (query: string) => {
+    if (query.length < 3) { setSuggestions([]); setShowSuggestions(false); return; }
+    setSuggestionsLoading(true);
+    try {
+      const fullQuery = city ? `${city}, ${query}` : query;
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullQuery)}&limit=5&accept-language=ru`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'NailMasters/2.0' },
+      });
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        // Собираем чистые адреса, убираем пустые и дубликаты
+        const seen = new Set<string>();
+        const items: { displayName: string; lat: string; lon: string }[] = [];
+        for (const d of data) {
+          const addr = d.address || {};
+          const street = addr.road || addr.pedestrian || addr.path || '';
+          const house = addr.house_number || addr.building || '';
+          const clean = [street, house].filter(Boolean).join(', ');
+          const displayName = shortenAddress(clean || d.display_name);
+          // Пропускаем пустые и дубликаты
+          if (!displayName || seen.has(displayName)) continue;
+          seen.add(displayName);
+          items.push({ displayName, lat: d.lat, lon: d.lon });
+        }
+        setSuggestions(items);
+        setShowSuggestions(items.length > 0);
+      }
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, [city]);
+
+  // Debounced suggestions on input
+  const handleAddressChange = (value: string) => {
+    setLocation(value);
+    setAddressTouched(true);
+    setGeoResult(null);
+    setGeoError('');
+    if (suggestTimer.current) clearTimeout(suggestTimer.current);
+    suggestTimer.current = setTimeout(() => fetchSuggestions(value), 350);
+  };
+
+  // Select suggestion
+  const selectSuggestion = (s: { displayName: string; lat: string; lon: string }) => {
+    const short = shortenAddress(s.displayName);
+    setLocation(short);
+    setShowSuggestions(false);
+    setSuggestions([]);
+    setGeoResult({ latitude: parseFloat(s.lat), longitude: parseFloat(s.lon), displayName: short });
+    setGeoError('');
+  };
 
   // Load profile
   useEffect(() => {
@@ -61,6 +134,16 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
           setWorkFormat(p.workFormat || []);
           setSterilization(p.sterilization || false);
           setDisposableTools(p.disposableTools || false);
+          initialLocation.current = p.address || '';
+          initialCity.current = p.city || '';
+          // If master already has coords, show as validated
+          if (p.latitude && p.longitude && p.address) {
+            setGeoResult({
+              latitude: Number(p.latitude),
+              longitude: Number(p.longitude),
+              displayName: [p.city, p.address].filter(Boolean).join(', '),
+            });
+          }
         }
       })
       .finally(() => setLoading(false));
@@ -68,16 +151,30 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
 
   const isMaster = profile?.role === 'nailmaster';
 
+  // Check if address was modified
+  const addressChanged =
+    location !== initialLocation.current || city !== initialCity.current;
+
   const handleSave = async () => {
     setSaving(true); setError('');
+
+    // Для мастера: если адрес изменён и не подтверждён геокодингом
+    if (isMaster && addressChanged && !geoResult && location.trim()) {
+      setError('Проверьте адрес — геокодинг не подтверждён. Дождитесь зелёной галочки.');
+      setSaving(false);
+      return;
+    }
+
     const token = localStorage.getItem('token');
     try {
-      // Base update
       const baseBody: Record<string, unknown> = { fullName, username, age: age ? Number(age) : undefined, phone: phone || undefined };
 
-      // Master-specific update
       if (isMaster) {
-        Object.assign(baseBody, { description, experience, city, specialties, workFormat, sterilization, disposableTools, address: location });
+        Object.assign(baseBody, {
+          description, experience, city, specialties, workFormat,
+          sterilization, disposableTools, address: location,
+          ...(geoResult ? { latitude: geoResult.latitude, longitude: geoResult.longitude } : {}),
+        });
       }
 
       const res = await fetch(isMaster ? '/api/masters/profile' : '/api/auth/profile', {
@@ -118,10 +215,10 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
     setWorkFormat(prev => prev.includes(fmt) ? prev.filter(f => f !== fmt) : [...prev, fmt]);
   };
 
-  if (!open) return null;
-
   const inputClass = "w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all";
   const chipClass = (active: boolean) => `rounded-full px-3 py-1.5 text-xs font-medium border transition-colors ${active ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 hover:bg-surface cursor-pointer'}`;
+
+  const canSave = !(isMaster && addressChanged && location.trim() && !geoResult);
 
   if (!open) return null;
 
@@ -174,13 +271,6 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
               </div>
             </div>
 
-            {!isMaster && (
-              <div>
-                <label className="block text-xs font-medium mb-1.5">Адрес</label>
-                <input value={location} onChange={e => setLocation(e.target.value)} className={inputClass} placeholder="Город, улица" />
-              </div>
-            )}
-
             {/* Master-specific fields */}
             {isMaster && (
               <>
@@ -200,16 +290,78 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
                       </div>
                       <div>
                         <label className="block text-xs font-medium mb-1.5">Город</label>
-                        <select value={city} onChange={e => setCity(e.target.value)} className={inputClass}>
+                        <select value={city} onChange={e => { setCity(e.target.value); setAddressTouched(true); }} className={inputClass}>
                           <option value="">Выберите город</option>
                           {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
                     </div>
 
+                    {/* Address with autocomplete + geocoding validation */}
                     <div>
-                      <label className="block text-xs font-medium mb-1.5">Адрес</label>
-                      <input value={location} onChange={e => setLocation(e.target.value)} className={inputClass} placeholder="Улица, дом, салон" />
+                      <label className="block text-xs font-medium mb-1.5">
+                        Адрес
+                        <span className="font-normal text-muted-foreground/60 ml-1">— улица, дом, салон</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          ref={addressInputRef}
+                          value={location}
+                          onChange={e => handleAddressChange(e.target.value)}
+                          onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+                          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                          className={inputClass}
+                          placeholder="Начните вводить адрес..."
+                          autoComplete="off"
+                        />
+                        {/* Geo status icon */}
+                        {geoResult && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <Check className="h-4 w-4 text-secondary" />
+                          </div>
+                        )}
+                        {geoError && !showSuggestions && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <AlertTriangle className="h-4 w-4 text-destructive" />
+                          </div>
+                        )}
+
+                        {/* Suggestions dropdown */}
+                        {showSuggestions && suggestions.length > 0 && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-xl shadow-lg overflow-hidden z-30 max-h-48 overflow-y-auto">
+                            {suggestionsLoading && (
+                              <div className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Поиск адресов...
+                              </div>
+                            )}
+                            {suggestions.map((s, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onMouseDown={e => { e.preventDefault(); selectSuggestion(s); }}
+                                className="w-full text-left px-3.5 py-2.5 text-sm hover:bg-accent transition-colors border-b border-border/20 last:border-0 flex items-start gap-2"
+                              >
+                                <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                                <span className="line-clamp-2">{s.displayName}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Geo feedback */}
+                      {geoResult && (
+                        <div className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-secondary/5 px-3 py-2 text-xs text-secondary border border-secondary/20">
+                          <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <span className="line-clamp-2">{geoResult.displayName}</span>
+                        </div>
+                      )}
+                      {geoError && (
+                        <p className="mt-1.5 flex items-center gap-1.5 text-xs text-destructive">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          {geoError}
+                        </p>
+                      )}
                     </div>
 
                     {/* Specialties */}
@@ -249,25 +401,15 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
                     <div className="space-y-3">
                       <label className="flex items-center justify-between cursor-pointer group">
                         <span className="text-sm">Стерилизация инструментов</span>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={sterilization}
-                          onClick={() => setSterilization(!sterilization)}
-                          className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${sterilization ? 'bg-secondary' : 'bg-muted'}`}
-                        >
+                        <button type="button" role="switch" aria-checked={sterilization} onClick={() => setSterilization(!sterilization)}
+                          className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${sterilization ? 'bg-secondary' : 'bg-muted'}`}>
                           <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${sterilization ? 'translate-x-5' : 'translate-x-0'}`} />
                         </button>
                       </label>
                       <label className="flex items-center justify-between cursor-pointer group">
                         <span className="text-sm">Одноразовые материалы</span>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={disposableTools}
-                          onClick={() => setDisposableTools(!disposableTools)}
-                          className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${disposableTools ? 'bg-secondary' : 'bg-muted'}`}
-                        >
+                        <button type="button" role="switch" aria-checked={disposableTools} onClick={() => setDisposableTools(!disposableTools)}
+                          className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${disposableTools ? 'bg-secondary' : 'bg-muted'}`}>
                           <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${disposableTools ? 'translate-x-5' : 'translate-x-0'}`} />
                         </button>
                       </label>
@@ -277,9 +419,16 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
               </>
             )}
 
+            {!isMaster && (
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Адрес</label>
+                <input value={location} onChange={e => setLocation(e.target.value)} className={inputClass} placeholder="Город, улица" />
+              </div>
+            )}
+
             <div className="flex gap-3 pt-4 border-t">
               <button onClick={onClose} className="flex-1 rounded-full border py-2.5 text-sm font-medium hover:bg-accent transition-colors">Отмена</button>
-              <button onClick={handleSave} disabled={saving} className="flex-1 rounded-full bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
+              <button onClick={handleSave} disabled={saving || !canSave} className="flex-1 rounded-full bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
                 {saving ? 'Сохранение...' : 'Сохранить'}
               </button>
             </div>

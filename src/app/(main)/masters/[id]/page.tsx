@@ -1,18 +1,23 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Star, MapPin, Award, Shield, Clock, Phone, ArrowLeft, Heart, Sparkles, Calendar, Check } from 'lucide-react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { Star, MapPin, Award, Shield, Clock, Phone, ArrowLeft, Heart, Sparkles, Calendar, Check, MessageCircle } from 'lucide-react';
 import { BookingModal } from '@/components/booking/booking-modal';
 import { DesignCard } from '@/components/design/design-card';
 import { ReviewModal } from '@/components/review/review-modal';
+import { MapHeader } from '@/components/shared/map-header';
+import { DistanceBadge } from '@/components/shared/distance-badge';
+import { useGeolocation } from '@/hooks/use-geolocation';
+import { formatDisplayAddress } from '@/lib/utils';
 
 interface MasterProfile {
   userId: string; fullName: string; description: string | null; city: string | null;
   rating: string; totalOrders: number; reviewsCount: number; specialties: string[] | null;
   startingPrice: string | null; experience: string | null; workFormat: string[] | null;
   sterilization: boolean; disposableTools: boolean; phone: string;
+  address?: string | null; latitude?: number | null; longitude?: number | null;
   services: { id: string; name: string; price: string; duration: number }[];
 }
 
@@ -20,12 +25,25 @@ interface Design { id: string; title: string; images: string[]; likesCount: numb
 
 export default function MasterProfilePage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [master, setMaster] = useState<MasterProfile | null>(null);
   const [designs, setDesigns] = useState<Design[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showBooking, setShowBooking] = useState(false);
+  const searchParams = useSearchParams();
+  const bookDesignId = searchParams.get('bookDesign');
+  const [showBooking, setShowBooking] = useState(!!bookDesignId);
   const [showReview, setShowReview] = useState(false);
-  const isGuest = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}')?.isGuest : false;
+  const [reviewRefreshKey, setReviewRefreshKey] = useState(0);
+  const { coords: clientCoords, request: requestGeo } = useGeolocation();
+  // Мастер не может записаться сам к себе
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  useEffect(() => {
+    try { setCurrentUserId(JSON.parse(localStorage.getItem('user') || '{}').id || null); } catch {}
+  }, []);
+  const isOwnProfile = currentUserId === id;
+
+  // Запрашиваем геолокацию при загрузке страницы
+  useEffect(() => { requestGeo(); }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -94,12 +112,31 @@ export default function MasterProfilePage() {
   );
 
   return (
-    <div className="min-h-screen py-8 px-4">
+    <div className="min-h-screen">
+      {/* ── Map header background ── */}
+      <MapHeader
+        latitude={master.latitude}
+        longitude={master.longitude}
+        label={formatDisplayAddress(master.address, master.city) || undefined}
+      >
+        <DistanceBadge
+          masterLat={master.latitude}
+          masterLon={master.longitude}
+          clientLat={clientCoords?.latitude}
+          clientLon={clientCoords?.longitude}
+        />
+      </MapHeader>
+
+      <div className="py-8 px-4">
       <div className="mx-auto max-w-4xl">
-        {/* Back link */}
-        <Link href="/masters" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors">
-          <ArrowLeft className="h-4 w-4" /> К каталогу мастеров
-        </Link>
+        {/* Back button — возврат на предыдущую страницу или на главную */}
+        <button onClick={() => {
+          const prev = document.referrer;
+          if (prev && prev.includes(window.location.host)) router.back();
+          else router.push('/');
+        }} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors">
+          <ArrowLeft className="h-4 w-4" /> Назад
+        </button>
 
         {/* ── Profile Header ── */}
         <div className="rounded-2xl border border-border/40 bg-card p-8 mb-8">
@@ -113,7 +150,6 @@ export default function MasterProfilePage() {
                   <span className="font-display text-[40px] text-primary">{master.fullName.charAt(0).toUpperCase()}</span>
                 </div>
               )}
-              
             </div>
 
             {/* Info */}
@@ -135,7 +171,7 @@ export default function MasterProfilePage() {
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-muted-foreground">
                     {master.city && (
                       <span className="inline-flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5 opacity-60" />{master.city}
+                        <MapPin className="h-3.5 w-3.5 opacity-60" />{formatDisplayAddress(master.address, master.city)}
                       </span>
                     )}
                     {master.workFormat && master.workFormat.length > 0 && (
@@ -157,21 +193,23 @@ export default function MasterProfilePage() {
                   </div>
                 </div>
 
-                {/* Sticky mobile CTA */}
-                <div className="fixed bottom-20 md:hidden left-4 right-4 z-30">
-                  {isGuest ? (
-                    <a href="/auth" className="block w-full rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg text-center">
-                      Зарегистрируйтесь для записи
-                    </a>
-                  ) : (
+                {/* Sticky mobile CTAs — только для клиентов, не для самого мастера */}
+                {!isOwnProfile && (
+                  <div className="fixed bottom-20 md:hidden left-4 right-4 z-30 flex gap-2">
+                    {/*<Link
+                      href={`/messages?with=${master.userId}&name=${encodeURIComponent(master.fullName)}`}
+                      className="flex items-center justify-center gap-1.5 rounded-full border border-border/60 bg-background/95 backdrop-blur-sm px-4 py-3 text-sm font-semibold shadow-lg hover:bg-surface transition-colors"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                    </Link>*/}
                     <button
                       onClick={() => setShowBooking(true)}
-                      className="w-full rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg"
+                      className="flex-1 rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg"
                     >
                       Записаться{master.startingPrice ? ` · от ${parseInt(master.startingPrice).toLocaleString('ru-RU')} ₽` : ''}
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -193,45 +231,19 @@ export default function MasterProfilePage() {
           )}
         </div>
 
-        {/* ── Services ── */}
-        {master.services && master.services.length > 0 && (
+        {/* ── Booking CTA ── */}
+        {!isOwnProfile && (
           <section className="mb-8">
             <div className="mb-4 flex items-end justify-between">
               <div>
-                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-1">Услуги</p>
-                <h2 className="font-display text-2xl">Услуги и цены</h2>
+                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-1">Запись</p>
+                <h2 className="font-display text-2xl">Записаться к мастеру</h2>
               </div>
-              {isGuest ? (
-                <a href="/auth" className="hidden md:inline-flex rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm">
-                  Зарегистрироваться
-                </a>
-              ) : (
-                <button onClick={() => setShowBooking(true)} className="hidden md:inline-flex rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm">
-                  Записаться
-                </button>
-              )}
+              <button onClick={() => setShowBooking(true)} className="hidden md:inline-flex rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm">
+                Записаться
+              </button>
             </div>
-            <div className="grid gap-2">
-              {master.services.map((s) => (
-                <div
-                  key={s.id}
-                  className={`flex items-center justify-between rounded-xl border border-border/40 bg-card px-5 py-4 transition-all duration-200 group ${
-                    isGuest ? '' : 'hover:border-primary/30 hover:shadow-sm cursor-pointer'
-                  }`}
-                  onClick={() => { if (!isGuest) setShowBooking(true); }}
-                >
-                  <div className="min-w-0 mr-4">
-                    <h3 className="font-semibold text-sm group-hover:text-primary transition-colors">{s.name}</h3>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                      <Clock className="h-3 w-3" />{s.duration} мин
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-primary/[0.06] px-3.5 py-1.5 text-sm font-bold text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
-                    {parseInt(s.price).toLocaleString('ru-RU')} ₽
-                  </span>
-                </div>
-              ))}
-            </div>
+            <p className="text-sm text-muted-foreground">Выберите дизайн, дату и время — мастер подтвердит запись</p>
           </section>
         )}
 
@@ -267,7 +279,7 @@ export default function MasterProfilePage() {
         )}
 
         {/* Reviews */}
-        <MasterReviews masterId={id} onReviewClick={() => setShowReview(true)} />
+        <MasterReviews masterId={id} onReviewClick={() => setShowReview(true)} refreshKey={reviewRefreshKey} />
 
         {/* Booking Modal */}
         {showBooking && (
@@ -276,15 +288,17 @@ export default function MasterProfilePage() {
             masterName={master.fullName}
             masterInfo={{ fullName: master.fullName, rating: master.rating, city: master.city, reviewsCount: master.reviewsCount }}
             onClose={() => setShowBooking(false)}
+            preselectedDesignId={bookDesignId || undefined}
           />
         )}
-        {showReview && <ReviewModal open={showReview} onClose={() => setShowReview(false)} masterId={id} masterName={master.fullName} onSubmitted={() => {}} />}
+        {showReview && <ReviewModal open={showReview} onClose={() => setShowReview(false)} masterId={id} masterName={master.fullName} onSubmitted={() => setReviewRefreshKey(k => k + 1)} />}
+      </div>
       </div>
     </div>
   );
 }
 
-function MasterReviews({ masterId, onReviewClick }: { masterId: string; onReviewClick: () => void }) {
+function MasterReviews({ masterId, onReviewClick, refreshKey }: { masterId: string; onReviewClick: () => void; refreshKey?: number }) {
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -293,7 +307,7 @@ function MasterReviews({ masterId, onReviewClick }: { masterId: string; onReview
       .then(r => r.json())
       .then(j => { if (j.success) setReviews(j.data || []); })
       .finally(() => setLoading(false));
-  }, [masterId]);
+  }, [masterId, refreshKey]);
 
   if (loading) return <div className="flex justify-center py-6"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
 

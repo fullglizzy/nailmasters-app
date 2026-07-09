@@ -7,6 +7,8 @@ export * from './schedules';
 export * from './reviews';
 export * from './comments';
 export * from './notifications';
+export * from './messages';
+export * from './sms-codes';
 
 // Реэкспорт для удобства
 export { users } from './users';
@@ -18,3 +20,4 @@ export { schedules } from './schedules';
 export { reviews, masterRatings } from './reviews';
 export { comments } from './comments';
 export { notifications } from './notifications';
+export { messages } from './messages';

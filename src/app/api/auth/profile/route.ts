@@ -88,29 +88,53 @@ export const PUT = withAuth(async (req: NextRequest) => {
       return errorResponse(parsed.error.errors.map((e) => e.message).join('; '), 422);
     }
 
-    const { username, fullName, phone, age, avatarUrl } = parsed.data;
+    const { username, fullName, phone, age, avatarUrl, role } = parsed.data;
 
     // Обновление базовых полей пользователя
     const userUpdates: Record<string, unknown> = {};
     if (username) userUpdates.username = username;
     if (age !== undefined) userUpdates.age = age;
     if (avatarUrl) userUpdates.avatarUrl = avatarUrl;
+    if (role) userUpdates.role = role;
 
     if (Object.keys(userUpdates).length > 0) {
       await db.update(schema.users).set(userUpdates).where(eq(schema.users.id, user.userId));
     }
 
-    // Обновление профильных полей
-    if (user.role === 'nailmaster' && (fullName || phone)) {
-      const profileUpdates: Record<string, unknown> = {};
-      if (fullName) profileUpdates.fullName = fullName;
-      if (phone) profileUpdates.phone = phone;
-      await db.update(schema.masterProfiles).set(profileUpdates).where(eq(schema.masterProfiles.userId, user.userId));
-    } else if (user.role === 'client' && (fullName || phone)) {
-      const profileUpdates: Record<string, unknown> = {};
-      if (fullName) profileUpdates.fullName = fullName;
-      if (phone) profileUpdates.phone = phone;
-      await db.update(schema.clientProfiles).set(profileUpdates).where(eq(schema.clientProfiles.userId, user.userId));
+    // Если роль изменилась или пришла — создаём профиль если нет
+    const effectiveRole = role || user.role;
+    if (effectiveRole === 'nailmaster') {
+      const existingProfile = await db.select().from(schema.masterProfiles).where(eq(schema.masterProfiles.userId, user.userId)).limit(1);
+      if (existingProfile.length > 0) {
+        const profileUpdates: Record<string, unknown> = {};
+        if (fullName) profileUpdates.fullName = fullName;
+        if (phone) profileUpdates.phone = phone;
+        if (Object.keys(profileUpdates).length > 0) {
+          await db.update(schema.masterProfiles).set(profileUpdates).where(eq(schema.masterProfiles.userId, user.userId));
+        }
+      } else {
+        // Конвертация клиента в мастера — берём данные из существующего профиля
+        const clientProfile = await db.select().from(schema.clientProfiles).where(eq(schema.clientProfiles.userId, user.userId)).limit(1);
+        const carryName = fullName || clientProfile[0]?.fullName || user.username || 'Мастер';
+        const carryPhone = phone || clientProfile[0]?.phone || user.phone || '';
+        await db.insert(schema.masterProfiles).values({ userId: user.userId, fullName: carryName, phone: carryPhone });
+        // Удаляем клиентский профиль
+        if (clientProfile.length > 0) {
+          await db.delete(schema.clientProfiles).where(eq(schema.clientProfiles.userId, user.userId));
+        }
+      }
+    } else if (effectiveRole === 'client') {
+      const existingProfile = await db.select().from(schema.clientProfiles).where(eq(schema.clientProfiles.userId, user.userId)).limit(1);
+      if (existingProfile.length > 0) {
+        const profileUpdates: Record<string, unknown> = {};
+        if (fullName) profileUpdates.fullName = fullName;
+        if (phone) profileUpdates.phone = phone;
+        if (Object.keys(profileUpdates).length > 0) {
+          await db.update(schema.clientProfiles).set(profileUpdates).where(eq(schema.clientProfiles.userId, user.userId));
+        }
+      } else {
+        await db.insert(schema.clientProfiles).values({ userId: user.userId, fullName: fullName || null, phone: phone || '' });
+      }
     }
 
     // Если гость обновляет профиль — снимаем гостевой статус

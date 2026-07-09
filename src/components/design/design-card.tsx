@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Heart, Play, ShoppingBag } from 'lucide-react';
+import { Heart, Play, ShoppingBag, Clock } from 'lucide-react';
 import { useLike } from '@/hooks/use-like';
 
 interface DesignCardProps {
@@ -9,6 +9,8 @@ interface DesignCardProps {
     id: string; title: string;
     images?: string[]; videoUrl?: string | null;
     likesCount?: number; ordersCount?: number;
+    _masterPrice?: string | number | null;
+    _masterDuration?: string | number | null;
   };
   rank?: number;
   href?: string;
@@ -25,6 +27,8 @@ export function DesignCard({ design, rank, href, delay }: DesignCardProps) {
   const hasVideo = design.videoUrl && design.videoUrl.trim() !== '';
   const hasImages = design.images && design.images.length > 0;
   const link = href || `/explore/${design.id}`;
+  const price = design._masterPrice ? parseInt(String(design._masterPrice)).toLocaleString('ru-RU') : null;
+  const duration = design._masterDuration ? parseInt(String(design._masterDuration)) : null;
 
   return (
     <Link
@@ -32,6 +36,21 @@ export function DesignCard({ design, rank, href, delay }: DesignCardProps) {
       className="group gloss-highlight relative overflow-hidden rounded-2xl border border-border/40 bg-card hover:shadow-lg transition-all duration-300 animate-reveal"
       style={delay !== undefined ? { animationDelay: `${delay}ms` } : undefined}
     >
+      {/* Price/duration overlay — only on master page */}
+      {(price || duration) && (
+        <div className="absolute top-2 right-2 z-10 flex gap-1">
+          {price && (
+            <span className="rounded-full bg-background/85 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-primary shadow-sm border border-border/40">
+              {price} ₽
+            </span>
+          )}
+          {duration && (
+            <span className="rounded-full bg-background/85 backdrop-blur-sm px-2 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm border border-border/40 flex items-center gap-0.5">
+              <Clock className="h-2.5 w-2.5" />{duration}м
+            </span>
+          )}
+        </div>
+      )}
       {/* Media */}
       <div className="aspect-[4/5] overflow-hidden bg-muted/40">
         {hasImages ? (
@@ -66,11 +85,11 @@ export function DesignCard({ design, rank, href, delay }: DesignCardProps) {
         </div>
       )}
 
-      {/* Like overlay */}
+      {/* Like overlay — always visible on mobile to avoid double-tap hover trap */}
       <button
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleLike(); }}
         disabled={isLoading}
-        className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-black/60"
+        className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200 hover:bg-black/60"
       >
         <Heart className={`h-3.5 w-3.5 ${isLiked ? 'fill-primary text-primary' : ''}`} />
         <span>{likesCount}</span>

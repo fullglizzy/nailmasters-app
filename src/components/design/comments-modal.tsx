@@ -12,9 +12,13 @@ interface Comment {
   replies?: Comment[];
 }
 
-interface Props { designId: string; designTitle: string; open: boolean; onClose: () => void; }
+interface Props {
+  designId: string; designTitle: string; open: boolean; onClose: () => void;
+  /** Вызывается после добавления комментария — чтобы родитель обновил счётчик */
+  onCommentAdded?: () => void;
+}
 
-export function CommentsModal({ designId, designTitle, open, onClose }: Props) {
+export function CommentsModal({ designId, designTitle, open, onClose, onCommentAdded }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
@@ -31,7 +35,8 @@ export function CommentsModal({ designId, designTitle, open, onClose }: Props) {
     fetch(`/api/designs/${designId}/comments`)
       .then(r => r.json())
       .then(json => {
-        if (json.success) setComments(groupComments(json.data || []));
+        // API отдаёт новые первыми — переворачиваем: старые сверху, новые снизу
+        if (json.success) setComments(groupComments((json.data || []).reverse()));
       })
       .finally(() => setLoading(false));
     // Reset
@@ -72,8 +77,9 @@ export function CommentsModal({ designId, designTitle, open, onClose }: Props) {
               : c
           ));
         } else {
-          setComments(prev => [{ ...newComment, replies: [] }, ...prev]);
+          setComments(prev => [...prev, { ...newComment, replies: [] }]);
         }
+        onCommentAdded?.();
         return true;
       }
     } catch {}

@@ -7,6 +7,7 @@ import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
 import { createDesignSnapshot } from '@/lib/design-snapshot';
 import { blockTimeSlot } from '@/lib/schedule';
 import { logger } from '@/lib/logger';
+import { formatDisplayAddress } from '@/lib/utils';
 
 // GET /api/orders — заказы пользователя
 export const GET = withAuth(async (req: NextRequest) => {
@@ -79,7 +80,7 @@ export const GET = withAuth(async (req: NextRequest) => {
         ...o,
         _design: design || null,
         _client: client ? { name: client.fullName || 'Клиент', phone: client.phone || '', avatar: avatarMap.get(o.clientId) } : null,
-        _master: master ? { name: master.fullName, phone: master.phone, address: [master.address, master.city].filter(Boolean).join(', '), avatar: avatarMap.get(o.nailMasterId) } : null,
+        _master: master ? { name: master.fullName, phone: master.phone, address: formatDisplayAddress(master.address, master.city), avatar: avatarMap.get(o.nailMasterId) } : null,
       };
     });
 
@@ -102,36 +103,23 @@ export const POST = withAuth(async (req: NextRequest) => {
     const parsed = createOrderSchema.safeParse(body);
     if (!parsed.success) return errorResponse(parsed.error.errors.map(e => e.message).join('; '), 422);
 
-    const { masterServiceId: legacyServiceId, masterServiceIds, nailDesignId, nailMasterId, requestedDateTime, description, clientNotes } = parsed.data;
-    const serviceIds = masterServiceIds || (legacyServiceId ? [legacyServiceId] : []);
+    const { masterServiceId: legacyServiceId, masterServiceIds, nailDesignId, nailMasterId, requestedDateTime, description, clientNotes, price } = parsed.data;
+    const serviceIds = masterServiceIds?.length ? masterServiceIds : (legacyServiceId ? [legacyServiceId] : []);
 
-    // Fetch all selected services
-    const selectedServices = await db.select().from(schema.masterServices)
-      .where(inArray(schema.masterServices.id, serviceIds));
-
-    if (!selectedServices.length) return errorResponse('Услуги не найдены', 404);
-
-    // Calculate total price and duration from all services
-    let totalPrice = selectedServices.reduce((sum, s) => sum + parseFloat(s.price.toString()), 0);
+    let totalPrice = parseFloat(price || '0');
     let additionalDuration = 0;
-    const firstServiceId = selectedServices[0].id;
+    const firstServiceId = serviceIds[0] || null;
 
-    // If design selected, add its surcharge
+    // Fetch services if provided
+    if (serviceIds.length > 0) {
+      const selectedServices = await db.select().from(schema.masterServices).where(inArray(schema.masterServices.id, serviceIds));
+      if (!selectedServices.length) return errorResponse('Услуги не найдены', 404);
+      totalPrice = selectedServices.reduce((sum, s) => sum + parseFloat(s.price.toString()), 0);
+    }
+
+    // If design selected, increment counter
     if (nailDesignId) {
-      const serviceDesigns = await db.select().from(schema.masterServiceDesigns)
-        .where(and(
-          eq(schema.masterServiceDesigns.masterServiceId, firstServiceId),
-          eq(schema.masterServiceDesigns.nailDesignId, nailDesignId),
-          eq(schema.masterServiceDesigns.isActive, true),
-        )).limit(1);
-
-      if (serviceDesigns.length > 0 && serviceDesigns[0].customPrice) {
-        totalPrice += parseFloat(serviceDesigns[0].customPrice.toString());
-        additionalDuration = serviceDesigns[0].additionalDuration || 0;
-      }
-      await db.update(schema.nailDesigns)
-        .set({ ordersCount: sql`${schema.nailDesigns.ordersCount} + 1` })
-        .where(eq(schema.nailDesigns.id, nailDesignId));
+      await db.update(schema.nailDesigns).set({ ordersCount: sql`${schema.nailDesigns.ordersCount} + 1` }).where(eq(schema.nailDesigns.id, nailDesignId));
     }
 
     // Create design snapshot
@@ -141,12 +129,10 @@ export const POST = withAuth(async (req: NextRequest) => {
       if (snapshot) designSnapshotId = snapshot.id;
     }
 
-    // Create single order with all services
-    const serviceNames = selectedServices.map(s => s.name).join(', ');
     const [order] = await db.insert(schema.orders).values({
-      description: description || serviceNames,
+      description: description || 'Заказ дизайна',
       status: 'pending',
-      price: String(totalPrice),
+      price: String(totalPrice || 0),
       requestedDateTime: new Date(requestedDateTime),
       clientNotes: clientNotes || null,
       additionalDuration: additionalDuration || null,
@@ -161,11 +147,16 @@ export const POST = withAuth(async (req: NextRequest) => {
     logger.info({ orderId: order.id, userId: user.userId }, 'Order created');
 
     // Send notification to master
-    await db.insert(schema.notifications).values({
+    const [notif] = await db.insert(schema.notifications).values({
       type: 'order_created', title: 'Новый заказ',
       message: `Новая запись на ${new Date(requestedDateTime).toLocaleDateString('ru')}`,
       recipientId: nailMasterId, relatedOrderId: order.id,
-    });
+    }).returning();
+
+    // WebSocket push
+    if (globalThis.sendNotification) {
+      globalThis.sendNotification(nailMasterId, { id: notif.id, type: 'order_created', title: 'Новый заказ', message: notif.message, createdAt: notif.createdAt }).catch(() => {});
+    }
 
     return successResponse(order, 'Заказ создан', 201);
   } catch (error) {

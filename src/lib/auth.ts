@@ -10,8 +10,8 @@ const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
 
 export interface TokenPayload {
   userId: string;
-  email: string;
-  username: string;
+  email?: string | null;
+  username?: string | null;
   role: UserRole;
   isGuest: boolean;
   fullName?: string | null;

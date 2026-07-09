@@ -10,16 +10,16 @@ async function seed() {
   // ============================================================
   const adminHash = await hash('Admin123!', 12);
   const [admin] = await db.insert(schema.users).values({
-    email: 'admin@nailmasters.com', username: 'admin', password: adminHash, role: 'admin',
+    phone: '+79000000000', email: 'admin@nailmasters.com', username: 'admin', password: adminHash, role: 'admin',
   }).onConflictDoNothing().returning();
   if (admin) {
     await db.insert(schema.adminProfiles).values({ userId: admin.id, fullName: 'Администратор', phone: '+79000000000', permissions: ['all'] }).onConflictDoNothing();
-    console.log('👑 Админ: admin@nailmasters.com / Admin123!');
+    console.log('👑 Админ: +79000000000 / Admin123!');
   }
 
   // Мастера
   const masters = [
-    { email: 'anna@nailmasters.com', username: 'anna_nails', password: await hash('Master123!', 12), fullName: 'Анна Петрова', phone: '+79001000001', description: 'Топ-мастер маникюра с 7-летним опытом. Специализируюсь на сложных дизайнах, наращивании и укреплении ногтей. Работаю только с премиальными материалами.', experience: '7 лет', city: 'Москва', specialties: ['Маникюр', 'Педикюр', 'Наращивание', 'Дизайн ногтей', 'Укрепление'], startingPrice: '2500', workFormat: ['salon'], sterilization: true, disposableTools: true, latitude: '55.7558', longitude: '37.6173' },
+    { email: 'anna@nailmasters.com', username: 'anna_nails', password: await hash('Master123!', 12), fullName: 'Анна Петрова', phone: '+79000000001', description: 'Топ-мастер маникюра с 7-летним опытом. Специализируюсь на сложных дизайнах, наращивании и укреплении ногтей. Работаю только с премиальными материалами.', experience: '7 лет', city: 'Москва', specialties: ['Маникюр', 'Педикюр', 'Наращивание', 'Дизайн ногтей', 'Укрепление'], startingPrice: '2500', workFormat: ['salon'], sterilization: true, disposableTools: true, latitude: '55.7558', longitude: '37.6173' },
     { email: 'elena@nailmasters.com', username: 'elena_beauty', password: await hash('Master123!', 12), fullName: 'Елена Соколова', phone: '+79001000002', description: 'Мастер маникюра и педикюра. Люблю минимализм и элегантные дизайны. Принимаю в уютном салоне в центре.', experience: '4 года', city: 'Москва', specialties: ['Маникюр', 'Педикюр', 'Дизайн ногтей', 'Shellac'], startingPrice: '1800', workFormat: ['salon', 'home'], sterilization: true, disposableTools: true, latitude: '55.7650', longitude: '37.6050' },
     { email: 'olga@nailmasters.com', username: 'olga_nailart', password: await hash('Master123!', 12), fullName: 'Ольга Иванова', phone: '+79001000003', description: 'Креативный мастер. Обожаю экспериментировать с цветами и текстурами. Создаю уникальные дизайны под ваш образ.', experience: '3 года', city: 'Санкт-Петербург', specialties: ['Маникюр', 'Наращивание', 'Дизайн ногтей', 'Аэрография'], startingPrice: '2000', workFormat: ['salon'], sterilization: true, disposableTools: false, latitude: '59.9343', longitude: '30.3351' },
     { email: 'maria@nailmasters.com', username: 'maria_nails_spb', password: await hash('Master123!', 12), fullName: 'Мария Кузнецова', phone: '+79001000004', description: 'Сертифицированный мастер с международными дипломами. Работаю с любыми типами ногтей. Гарантирую качество и стойкость.', experience: '6 лет', city: 'Санкт-Петербург', specialties: ['Маникюр', 'Педикюр', 'Наращивание', 'Дизайн ногтей', 'Парафинотерапия'], startingPrice: '3000', workFormat: ['salon'], sterilization: true, disposableTools: true, latitude: '59.9386', longitude: '30.3141' },
@@ -29,7 +29,7 @@ async function seed() {
   const masterUsers = [];
   for (const m of masters) {
     const [user] = await db.insert(schema.users).values({
-      email: m.email, username: m.username, password: m.password, role: 'nailmaster',
+      phone: m.phone, email: m.email, username: m.username, password: m.password, role: 'nailmaster',
     }).onConflictDoNothing().returning();
     if (user) {
       masterUsers.push(user);
@@ -47,7 +47,7 @@ async function seed() {
   // Клиенты
   const clientHash = await hash('Client123!', 12);
   const clients = [
-    { email: 'client@nailmasters.com', username: 'elena_client', fullName: 'Елена Иванова', phone: '+79002000001', latitude: '55.7539', longitude: '37.6208' },
+    { email: 'client@nailmasters.com', username: 'elena_client', fullName: 'Елена Иванова', phone: '+79000000002', latitude: '55.7539', longitude: '37.6208' },
     { email: 'katya@nailmasters.com', username: 'katya_style', fullName: 'Екатерина Смирнова', phone: '+79002000002', latitude: '55.7580', longitude: '37.6100' },
     { email: 'nastya@nailmasters.com', username: 'nastya_love', fullName: 'Анастасия Волкова', phone: '+79002000003', latitude: '59.9500', longitude: '30.3000' },
     { email: 'sasha@nailmasters.com', username: 'sasha_nails', fullName: 'Александра Попова', phone: '+79002000004', latitude: '55.7900', longitude: '49.1100' },
@@ -56,7 +56,7 @@ async function seed() {
   const clientUsers = [];
   for (const c of clients) {
     const [user] = await db.insert(schema.users).values({
-      email: c.email, username: c.username, password: clientHash, role: 'client',
+      phone: c.phone, email: c.email, username: c.username, password: clientHash, role: 'client',
     }).onConflictDoNothing().returning();
     if (user) {
       clientUsers.push(user);
@@ -331,12 +331,12 @@ async function seed() {
   console.log(`   ❤️ Лайки: ${likesCreated}`);
   console.log(`   💬 Комментарии: ${commentsCreated}`);
   console.log('='.repeat(50));
-  console.log('\n🔑 Учетные данные для входа:');
-  console.log('   admin@nailmasters.com  / Admin123!  (администратор)');
-  console.log('   anna@nailmasters.com   / Master123! (мастер)');
-  console.log('   client@nailmasters.com / Client123! (клиент)');
-  console.log(`   Пароль для всех мастеров: Master123!`);
-  console.log(`   Пароль для всех клиентов: Client123!`);
+  console.log('\n🔑 Вход по SMS (код всегда 000000):');
+  console.log('   +79000000000 — администратор');
+  console.log('   +79001000001 — мастер Анна Петрова');
+  console.log('   +79002000001 — клиент Елена Иванова');
+  console.log('   Все мастера: +79001000001..+79001000005');
+  console.log('   Все клиенты: +79002000001..+79002000004');
 }
 
 seed()

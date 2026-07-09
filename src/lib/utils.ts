@@ -84,3 +84,58 @@ export function isEmail(value: string): boolean {
 export function isPhone(value: string): boolean {
   return /^\+?7?\d{10,11}$/.test(value.replace(/[\s()-]/g, ''));
 }
+
+// Слова-признаки для классификации частей адреса
+const STREET_RE = /улиц[аы]|проспект|переулок|проезд|бульвар|шоссе|набережн|площадь|аллея|тупик|тракт/i;
+const DISTRICT_RE = /район|микрорайон|поселение|округ|слобода/i;
+const ADMIN_RE = /федеральный округ|область|край|республика|автономн/i;
+
+/**
+ * Обрезает полный адрес Nominatim до «улица, дом».
+ * Отбрасывает: район, город, регион, федеральный округ, индекс, страну.
+ * Переставляет улицу перед номером дома (Nominatim отдаёт дом первым).
+ *
+ * Пример:
+ *   "16 к3, улица Фомичёвой, район Северное Тушино, Москва,
+ *    Центральный федеральный округ, 125481, Россия"
+ *   → "улица Фомичёвой, 16 к3"
+ */
+export function shortenAddress(fullAddress: string): string {
+  const parts = fullAddress.split(',').map((p) => p.trim()).filter(Boolean);
+
+  const streets: string[] = [];
+  const houses: string[] = [];
+
+  for (const p of parts) {
+    if (/^\d{5,6}$/.test(p)) continue;               // почтовый индекс
+    if (/^(россия|russia|беларусь|belarus|украина|ukraine|казахстан|kazakhstan)$/i.test(p)) continue; // страна
+    if (ADMIN_RE.test(p)) continue;                   // регион, федеральный округ
+    if (DISTRICT_RE.test(p)) continue;                // район, микрорайон
+    if (STREET_RE.test(p)) {
+      streets.push(p);
+    } else if (/^\d/.test(p)) {
+      houses.push(p);
+    }
+    // остальное (город и т.д.) пропускаем — город хранится отдельно
+  }
+
+  // Порядок: улица → дом (город хранится отдельно, не дублируем)
+  return [...streets, ...houses].slice(0, 3).join(', ');
+}
+
+/**
+ * Форматирует адрес для отображения: город → улица → дом.
+ */
+export function formatDisplayAddress(
+  address: string | null | undefined,
+  city: string | null | undefined,
+): string {
+  const short = address ? shortenAddress(address) : '';
+  const c = city?.trim() || '';
+  if (!short && !c) return '';
+  if (!short) return c;
+  if (!c) return short;
+  // Не дублируем город если он уже есть в сокращённом адресе
+  if (short.toLowerCase().includes(c.toLowerCase())) return short;
+  return `${c}, ${short}`;
+}

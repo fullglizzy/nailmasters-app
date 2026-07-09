@@ -4,6 +4,8 @@ import { eq } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/response';
 import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
 import { updateMasterProfileSchema } from '@/lib/validators';
+import { geocodeAddress } from '@/lib/geo';
+import { logger } from '@/lib/logger';
 
 export const GET = withAuth(async (req: NextRequest) => {
   const user = (req as AuthenticatedRequest).user!;
@@ -24,6 +26,23 @@ export const PUT = withAuth(async (req: NextRequest) => {
   if (!parsed.success) return errorResponse(parsed.error.errors.map(e => e.message).join('; '), 422);
 
   const updates = { ...parsed.data };
+  const { address, city } = parsed.data;
+
+  // Авто-геокодинг: если адрес изменился — получаем координаты
+  if (address) {
+    try {
+      const fullAddress = city ? `${city}, ${address}` : address;
+      const geo = await geocodeAddress(fullAddress);
+      if (geo) {
+        updates.latitude = geo.latitude;
+        updates.longitude = geo.longitude;
+        logger.info({ geo }, 'Master address geocoded');
+      }
+    } catch (err) {
+      logger.warn({ err, address }, 'Geocode failed, saving without coordinates');
+    }
+  }
+
   // Decimal fields must be strings for Drizzle
   const dbUpdates: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(updates)) {

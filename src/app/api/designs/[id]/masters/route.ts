@@ -1,58 +1,63 @@
 import { NextRequest } from 'next/server';
 import { db, schema } from '@/lib/db';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import { successResponse } from '@/lib/response';
 
 // GET /api/designs/:id/masters — мастера, которые могут выполнить этот дизайн
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  // Находим мастеров через master_service_designs (новая система)
-  const serviceDesigns = await db
-    .select({
-      masterId: schema.masterServices.masterId,
-    })
-    .from(schema.masterServiceDesigns)
-    .innerJoin(schema.masterServices, eq(schema.masterServiceDesigns.masterServiceId, schema.masterServices.id))
-    .where(and(
-      eq(schema.masterServiceDesigns.nailDesignId, id),
-      eq(schema.masterServiceDesigns.isActive, true),
-      eq(schema.masterServices.isActive, true),
-    ));
-
-  // Также через MasterDesign (старая система "Я так могу")
-  const masterDesigns = await db
-    .select({ masterId: schema.masterDesigns.nailMasterId })
+  // 1. Мастера через "Я так могу" (master_designs)
+  const canDoLinks = await db
+    .select()
     .from(schema.masterDesigns)
     .where(and(
       eq(schema.masterDesigns.nailDesignId, id),
       eq(schema.masterDesigns.isActive, true),
     ));
+  console.log(`[MastersList] designId=${id}, canDoLinks=${canDoLinks.length}, ids=[${canDoLinks.map(l => l.nailMasterId).join(',')}]`);
 
-  // Собираем уникальные ID мастеров
+  // 2. Автор дизайна (uploadedByMasterId)
+  const design = await db
+    .select({ uploadedByMasterId: schema.nailDesigns.uploadedByMasterId })
+    .from(schema.nailDesigns)
+    .where(eq(schema.nailDesigns.id, id))
+    .limit(1);
+
+  const authorId = design[0]?.uploadedByMasterId;
+
+  // Собираем уникальные ID + их цены/время
+  const priceMap = new Map<string, { price: string | null; duration: number | null }>();
+  for (const link of canDoLinks) {
+    priceMap.set(link.nailMasterId, { price: link.customPrice, duration: link.estimatedDuration });
+  }
+
   const masterIds = [...new Set([
-    ...serviceDesigns.map(d => d.masterId),
-    ...masterDesigns.map(d => d.masterId),
+    ...canDoLinks.map(l => l.nailMasterId),
+    ...(authorId ? [authorId] : []),
   ])];
 
   if (!masterIds.length) return successResponse([]);
 
-  // Получаем профили мастеров
   const masters = await db
     .select({
       userId: schema.masterProfiles.userId,
       fullName: schema.masterProfiles.fullName,
       rating: schema.masterProfiles.rating,
       city: schema.masterProfiles.city,
+      latitude: schema.masterProfiles.latitude,
+      longitude: schema.masterProfiles.longitude,
     })
     .from(schema.masterProfiles)
-    .where(and(
-      eq(schema.masterProfiles.isActive, true),
-      eq(schema.masterProfiles.isModerated, true),
-    ));
+    .where(eq(schema.masterProfiles.isActive, true));
 
-  // Фильтруем только тех, кто в masterIds
-  const filtered = masters.filter(m => masterIds.includes(m.userId));
+  const filtered = masters
+    .filter(m => masterIds.includes(m.userId))
+    .map(m => ({
+      ...m,
+      _price: priceMap.get(m.userId)?.price || null,
+      _duration: priceMap.get(m.userId)?.duration || null,
+    }));
 
   return successResponse(filtered);
 }

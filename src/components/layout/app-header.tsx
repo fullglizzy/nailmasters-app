@@ -2,14 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Search, Plus, User, LogIn, Bell } from 'lucide-react';
+import { Search, Plus, User, Bell, MessageCircle } from 'lucide-react';
 import { ThemeToggle } from '@/components/shared/theme-toggle';
 import { useAuthState } from '@/components/providers/guest-provider';
 import { NotificationBell } from '@/components/shared/notification-bell';
+import { useUnreadMessages } from '@/hooks/use-unread-messages';
 
 export function AppHeader() {
   const pathname = usePathname();
   const { token, role, isGuest } = useAuthState();
+  const unreadMessages = useUnreadMessages();
 
   const isAuthPage = pathname === '/auth';
   const isFeedPage = pathname.startsWith('/explore');
@@ -66,6 +68,20 @@ export function AppHeader() {
               <Plus className="h-[18px] w-[18px]" />
             </Link>
           )}
+          {/*{token && !isGuest && (
+            <Link
+              href="/messages"
+              aria-label="Сообщения"
+              className="relative flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground transition-colors"
+            >
+              <MessageCircle className="h-[18px] w-[18px]" />
+              {unreadMessages > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white">
+                  {unreadMessages > 9 ? '9+' : unreadMessages}
+                </span>
+              )}
+            </Link>
+          )}*/}
           {token && !isGuest && <NotificationBell />}
           {token && (
             <Link
@@ -80,16 +96,6 @@ export function AppHeader() {
               <User className="h-[18px] w-[18px]" />
             </Link>
           )}
-          {(!token || isGuest) && (
-            <Link
-              href="/auth"
-              className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              <LogIn className="h-4 w-4" />
-              <span className="hidden sm:inline">Войти</span>
-            </Link>
-          )}
-
           <ThemeToggle />
         </div>
       </div>

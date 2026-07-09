@@ -1,48 +1,39 @@
 'use client';
 
-import { useEffect, useState, Suspense, useRef } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { User, Settings, Heart, Calendar, LogOut, Upload, Star, Clock, ShoppingBag, Grid3X3, Edit, MessageSquare } from 'lucide-react';
+import { User, Heart, Calendar, LogOut, Upload, Star, Clock, ShoppingBag, Grid3X3, Edit, MessageSquare, Eye, Sparkles } from 'lucide-react';
 import { FavoritesTab } from '@/components/profile/favorites-tab';
 import { BookingsTab } from '@/components/profile/bookings-tab';
 import { UploadsTab } from '@/components/profile/uploads-tab';
 import { ReviewsTab } from '@/components/profile/reviews-tab';
 import { EditProfileModal } from '@/components/profile/edit-profile-modal';
-import { AddServiceModal } from '@/components/profile/add-service-modal';
 import { DesignCard } from '@/components/design/design-card';
+import { ScrollableRow } from '@/components/shared/scrollable-row';
 
 interface UserProfile {
   id: string; email: string; username: string; role: string; isGuest: boolean;
   avatarUrl: string | null; fullName: string | null; phone: string | null;
   rating?: string; totalOrders?: number; reviewsCount?: number;
+  // Master completeness fields
+  city?: string | null; address?: string | null; description?: string | null;
+  experience?: string | null; specialties?: string[] | null;
+  startingPrice?: string | null; workFormat?: string[] | null;
+  sterilization?: boolean; disposableTools?: boolean;
 }
 
 function ProfileContent() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
-  const [serviceModalOpen, setServiceModalOpen] = useState(false);
-  const [servicesKey, setServicesKey] = useState(0);
   const [scheduleKey, setScheduleKey] = useState(0);
   const [designsKey, setDesignsKey] = useState(0);
-  const tabScrollRef = useRef<HTMLDivElement>(null);
+  const [showMasterConfirm, setShowMasterConfirm] = useState(false);
 
   const router = useRouter();
   const searchParams = useSearchParams();
   const tab = searchParams.get('tab') || 'overview';
-
-  // Horizontal scroll on wheel for tab bar and schedule dates (must be after tab declaration)
-  useEffect(() => {
-    const addWheel = (el: HTMLDivElement | null) => {
-      if (!el) return;
-      const fn = (e: WheelEvent) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { e.preventDefault(); el.scrollLeft += e.deltaY; } };
-      el.addEventListener('wheel', fn, { passive: false });
-      return () => el.removeEventListener('wheel', fn);
-    };
-    const cleanups = [addWheel(tabScrollRef.current)];
-    return () => cleanups.forEach(fn => fn?.());
-  }, [tab, servicesKey, scheduleKey]);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -68,11 +59,22 @@ function ProfileContent() {
   const isMaster = profile.role === 'nailmaster';
   const isClient = profile.role === 'client';
 
+  // Проверка заполненности профиля мастера
+  const masterMissing: string[] = [];
+  if (isMaster) {
+    if (!profile.city) masterMissing.push('город');
+    if (!profile.address) masterMissing.push('адрес');
+    if (!profile.description) masterMissing.push('описание');
+    if (!profile.experience) masterMissing.push('опыт');
+    if (!profile.specialties?.length) masterMissing.push('специализации');
+    if (!profile.startingPrice) masterMissing.push('стартовая цена');
+    if (!profile.workFormat?.length) masterMissing.push('формат работы');
+  }
+
   const tabs = [
     { id: 'overview', label: 'Обзор', icon: User },
     ...(isMaster ? [
       { id: 'designs', label: 'Я так могу', icon: Grid3X3 },
-      { id: 'services', label: 'Услуги', icon: Settings },
       { id: 'schedule', label: 'Расписание', icon: Clock },
     ] : []),
     { id: 'orders', label: 'Записи', icon: ShoppingBag },
@@ -100,7 +102,7 @@ function ProfileContent() {
             </div>
             <div className="flex-1 min-w-0">
               <h1 className="font-display text-2xl">{profile.fullName || profile.username}</h1>
-              <p className="text-sm text-muted-foreground">@{profile.username}{!profile.isGuest && ` · ${profile.email}`}</p>
+              <p className="text-sm text-muted-foreground">@{profile.username}</p>
               <div className="flex items-center gap-3 mt-1.5 text-sm text-muted-foreground">
                 <span className="capitalize">{isMaster ? 'Мастер' : isClient ? 'Клиент' : 'Администратор'}</span>
                 {profile.phone && <span>· {profile.phone}</span>}
@@ -108,26 +110,60 @@ function ProfileContent() {
                   <span className="inline-flex items-center gap-1 font-medium text-gold"><Star className="h-3.5 w-3.5 fill-current" />{profile.rating}</span>
                 )}
               </div>
-              {profile.isGuest && (
-                <div className="mt-3 rounded-xl bg-gold/10 border border-gold/20 px-3.5 py-3 text-xs leading-relaxed">
-                  <span className="font-semibold">Гостевой аккаунт.</span>{' '}
-                  <Link href="/auth" className="underline font-semibold text-primary hover:text-primary/80 transition-colors">Зарегистрируйтесь</Link>
-                  , чтобы сохранить данные и получить доступ ко всем функциям.
-                </div>
+              
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Я мастер — показываем и гостям, и клиентам */}
+              {isClient && !isMaster && (
+                <button onClick={() => {
+                  if (profile.isGuest) { router.push('/auth?as=master'); return; }
+                  setShowMasterConfirm(true);
+                }} className="flex items-center gap-1.5 rounded-full border border-gold/60 bg-gold/10 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/20 transition-colors" title="Стать мастером">
+                  <Sparkles className="h-4 w-4" /> Я мастер
+                </button>
+              )}
+              {isMaster && (
+                <Link href={`/masters/${profile.id}`} target="_blank" className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2 text-sm font-medium hover:bg-surface transition-colors" title="Публичный профиль">
+                  <Eye className="h-4 w-4" />
+                </Link>
+              )}
+              {!profile.isGuest && (
+                <>
+                  <button onClick={() => setEditOpen(true)} className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2 text-sm font-medium hover:bg-surface transition-colors">
+                    <Edit className="h-4 w-4" /> Редактировать
+                  </button>
+                  <button onClick={handleLogout} className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2 text-sm font-medium hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors">
+                    <LogOut className="h-4 w-4" /> Выйти
+                  </button>
+                </>
               )}
             </div>
-            {!profile.isGuest && (
-              <div className="flex items-center gap-2">
-                <button onClick={() => setEditOpen(true)} className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2 text-sm font-medium hover:bg-surface transition-colors">
-                  <Edit className="h-4 w-4" /> Редактировать
-                </button>
-                <button onClick={handleLogout} className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2 text-sm font-medium hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors">
-                  <LogOut className="h-4 w-4" /> Выйти
-                </button>
-              </div>
-            )}
           </div>
         </div>
+
+        {/* Предупреждение о незаполненном профиле */}
+        {isMaster && masterMissing.length > 0 && (
+          <div className="mb-6 rounded-2xl border border-gold/40 bg-gold/5 p-5">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl shrink-0">⚠️</span>
+              <div className="space-y-2">
+                <h3 className="font-semibold text-sm">Заполните профиль для привлечения клиентов</h3>
+                <p className="text-xs text-muted-foreground">
+                  Не указаны:{' '}
+                  {masterMissing.map((f, i) => (
+                    <span key={f}>
+                      <span className="font-medium text-foreground underline decoration-gold/50">{f}</span>
+                      {i < masterMissing.length - 1 && ', '}
+                    </span>
+                  ))}
+                </p>
+                <button onClick={() => setEditOpen(true)} className="inline-flex items-center gap-1.5 rounded-full bg-gold px-4 py-1.5 text-xs font-semibold text-white hover:bg-gold/90 transition-colors">
+                  <Edit className="h-3.5 w-3.5" /> Заполнить
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stats (master only) */}
         {isMaster && tab === 'overview' && (
@@ -146,7 +182,7 @@ function ProfileContent() {
         )}
 
         {/* Tab navigation — pill style */}
-        <div className="min-w-0 flex gap-1 overflow-x-auto hide-scrollbar mb-6 rounded-full border border-border/60 bg-muted/30 p-1" ref={tabScrollRef}>
+        <ScrollableRow className="flex gap-1 mb-6 rounded-full border border-border/60 bg-muted/30 p-1">
           {tabs.map(t => (
             <button
               key={t.id}
@@ -161,16 +197,13 @@ function ProfileContent() {
               <span className="hidden sm:inline">{t.label}</span>
             </button>
           ))}
-        </div>
+        </ScrollableRow>
 
         {/* Tab content */}
         <div className="min-h-[300px]">
           {tab === 'orders' && <BookingsTab />}
           {tab === 'favorites' && <FavoritesTab />}
           {isMaster && tab === 'designs' && <MasterDesignsTab key={designsKey} />}
-          {isMaster && tab === 'services' && (
-            <MasterServicesTab key={servicesKey} onAdd={() => setServiceModalOpen(true)} onDelete={() => setServicesKey(k => k + 1)} />
-          )}
           {isMaster && tab === 'schedule' && <MasterScheduleTab key={scheduleKey} onAdd={async (date, start, end) => {
             const token = localStorage.getItem('token');
             await fetch('/api/masters/schedule', {
@@ -213,6 +246,44 @@ function ProfileContent() {
         </div>
       </div>
 
+      {/* Master confirmation modal */}
+      {showMasterConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowMasterConfirm(false)}>
+          <div className="bg-background rounded-2xl p-6 w-[90vw] max-w-sm shadow-xl text-center" onClick={e => e.stopPropagation()}>
+            <Sparkles className="h-10 w-10 mx-auto mb-4 text-gold" />
+            <h2 className="text-xl font-bold mb-2">Стать мастером?</h2>
+            <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+              Это действие нельзя отменить. Ваш аккаунт будет навсегда преобразован в аккаунт мастера. Клиентский профиль будет удалён.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowMasterConfirm(false)} className="flex-1 rounded-full border border-border/60 py-2.5 text-sm font-medium hover:bg-surface transition-colors">
+                Отмена
+              </button>
+              <button onClick={async () => {
+                setShowMasterConfirm(false);
+                const token = localStorage.getItem('token');
+                try {
+                  const res = await fetch('/api/auth/profile', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ role: 'nailmaster' }),
+                  });
+                  if (res.ok) {
+                    const u = JSON.parse(localStorage.getItem('user') || '{}');
+                    u.role = 'nailmaster';
+                    localStorage.setItem('user', JSON.stringify(u));
+                    window.dispatchEvent(new Event('auth-change'));
+                    window.location.reload();
+                  }
+                } catch {}
+              }} className="flex-1 rounded-full bg-gold py-2.5 text-sm font-semibold text-white hover:bg-gold/90 transition-colors">
+                Стать мастером
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit modal */}
       <EditProfileModal
         open={editOpen}
@@ -223,12 +294,6 @@ function ProfileContent() {
           const json = await res.json();
           if (json.success) setProfile(json.data);
         }}
-      />
-      {/* Add service modal */}
-      <AddServiceModal
-        open={serviceModalOpen}
-        onClose={() => setServiceModalOpen(false)}
-        onCreated={() => { setServicesKey(k => k + 1); setServiceModalOpen(false); }}
       />
     </div>
   );
@@ -259,69 +324,7 @@ function MasterDesignsTab() {
   return <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">{designs.map((d: any, i: number) => <DesignCard key={d.id} design={d} delay={Math.min(i * 30, 300)} />)}</div>;
 }
 
-function MasterServicesTab({ onAdd, onDelete }: { onAdd?: () => void; onDelete?: () => void }) {
-  const [services, setServices] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    fetch('/api/masters/services', { headers: { Authorization: `Bearer ${token!}` } })
-      .then(r => r.json()).then(j => { if (j.success) setServices(j.data); })
-      .finally(() => setLoading(false));
-  }, []);
-  const handleDelete = async (id: string) => {
-    setDeletingId(null);
-    const token = localStorage.getItem('token');
-    await fetch(`/api/masters/services/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-    setServices(prev => prev.filter(s => s.id !== id));
-    onDelete?.();
-  };
-  if (loading) return <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{services.length} {services.length === 1 ? 'услуга' : services.length < 5 ? 'услуги' : 'услуг'}</p>
-        {onAdd && <button onClick={onAdd} className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">+ Добавить</button>}
-      </div>
-      {!services.length ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border border-dashed border-border/40 bg-card/50">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-muted/30">
-            <Settings className="h-7 w-7 text-muted-foreground/40" />
-          </div>
-          <p className="text-sm font-medium text-muted-foreground">Нет услуг</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Создайте первую услугу, чтобы клиенты могли записаться</p>
-          {onAdd && <button onClick={onAdd} className="mt-4 rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">+ Добавить услугу</button>}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {services.map((s: any) => (
-            <div key={s.id} className="flex justify-between items-center rounded-xl border border-border/40 bg-card px-5 py-4 hover:border-border hover:shadow-sm transition-all duration-200">
-              <div className="min-w-0 flex-1 mr-4">
-                <div className="font-medium text-sm truncate">{s.name}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{s.duration} мин</div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="rounded-full bg-primary/[0.06] px-3 py-1 text-sm font-bold text-primary">{parseInt(s.price).toLocaleString()} ₽</span>
-                {deletingId === s.id ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs animate-in fade-in zoom-in-95 duration-150">
-                    <span className="text-muted-foreground">Удалить?</span>
-                    <button onClick={() => handleDelete(s.id)} className="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold text-destructive-foreground hover:bg-destructive/90 transition-colors">Да</button>
-                    <button onClick={() => setDeletingId(null)} className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] font-medium hover:bg-surface transition-colors">Нет</button>
-                  </span>
-                ) : (
-                  <button onClick={() => setDeletingId(s.id)} className="text-xs font-medium text-muted-foreground hover:text-destructive transition-colors shrink-0">Удалить</button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: string, end: string) => Promise<void>; onDelete?: (slotId: string) => Promise<void> }) {
-  const scheduleScrollRef = useRef<HTMLDivElement>(null);
   const [slots, setSlots] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -383,7 +386,7 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
               <Calendar className="h-3.5 w-3.5 inline mr-1.5" />Выберите дату
             </label>
             <div className="overflow-hidden">
-              <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1.5 -mr-5 pr-5" ref={scheduleScrollRef}>
+              <ScrollableRow className="flex gap-2 pb-1.5" fadeRightOffset="1.25rem" noFade>
               {dateOptions.map(d => {
                 const date = new Date(d);
                 const isToday = d === new Date().toISOString().split('T')[0];
@@ -405,7 +408,7 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
                   </button>
                 );
               })}
-            </div>
+              </ScrollableRow>
             </div>
           </div>
 

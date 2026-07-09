@@ -43,11 +43,15 @@ export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promi
   }
 
   // Notify master
-  await db.insert(schema.notifications).values({
+  const [notif] = await db.insert(schema.notifications).values({
     type: 'order_cancelled', title: 'Заказ отменён',
     message: `Запись на ${dateStr} в ${timeStr.slice(0, 5)} отменена`,
     recipientId: order.nailMasterId, relatedOrderId: id,
-  });
+  }).returning();
+
+  if (globalThis.sendNotification) {
+    globalThis.sendNotification(order.nailMasterId, { id: notif.id, type: 'order_cancelled', title: 'Заказ отменён', message: notif.message, createdAt: notif.createdAt }).catch(() => {});
+  }
 
   return successResponse(null, 'Заказ отменен');
 });

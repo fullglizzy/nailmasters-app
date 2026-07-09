@@ -4,22 +4,17 @@ import { z } from 'zod';
 // Auth schemas
 // ============================================================
 export const registerSchema = z.object({
-  email: z.string().email('Некорректный email'),
-  username: z.string().min(3, 'Минимум 3 символа').max(255, 'Максимум 255 символов'),
+  phone: z.string().min(10, 'Введите телефон').max(20),
+  fullName: z.string().min(2, 'Введите имя').max(255),
   password: z
     .string()
-    .min(8, 'Минимум 8 символов')
-    .regex(/[A-Z]/, 'Хотя бы одна заглавная буква')
-    .regex(/[0-9]/, 'Хотя бы одна цифра')
-    .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, 'Хотя бы один спецсимвол'),
+    .min(6, 'Минимум 6 символов')
+    .max(255),
   role: z.enum(['client', 'nailmaster']),
-  fullName: z.string().min(2).max(255).optional(),
-  phone: z.string().min(10).max(20).optional(),
-  age: z.number().min(14).max(120).optional(),
 });
 
 export const loginSchema = z.object({
-  login: z.string().min(1, 'Введите email или телефон'),
+  phone: z.string().min(10, 'Введите телефон'),
   password: z.string().min(1, 'Введите пароль'),
 });
 
@@ -42,6 +37,7 @@ export const updateProfileSchema = z.object({
   phone: z.string().min(10).max(20).optional(),
   age: z.number().min(14).max(120).optional(),
   avatarUrl: z.string().optional(),
+  role: z.enum(['client', 'nailmaster']).optional(),
 });
 
 // ============================================================
@@ -97,13 +93,14 @@ export const designFiltersSchema = z.object({
 // Order schemas
 // ============================================================
 export const createOrderSchema = z.object({
-  masterServiceIds: z.array(z.string().uuid()).min(1, 'Выберите хотя бы одну услугу'),
+  masterServiceIds: z.array(z.string().uuid()).optional(),
   masterServiceId: z.string().uuid().optional(), // backwards compat
   nailDesignId: z.string().uuid().optional(),
   nailMasterId: z.string().uuid('Некорректный ID мастера'),
   requestedDateTime: z.string().refine((s) => !isNaN(Date.parse(s)), 'Некорректная дата/время'),
   description: z.string().max(2000).optional(),
   clientNotes: z.string().max(2000).optional(),
+  price: z.string().optional(),
 });
 
 export const updateOrderStatusSchema = z.object({

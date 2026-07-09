@@ -34,6 +34,8 @@ export function BookingsTab() {
   const [role, setRole] = useState<string>('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [reviewMaster, setReviewMaster] = useState<{ id: string; name: string } | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
+  const [bookingSuccess, setBookingSuccess] = useState(false);
 
   const loadOrders = useCallback(() => {
     const token = localStorage.getItem('token');
@@ -47,15 +49,52 @@ export function BookingsTab() {
 
   useEffect(loadOrders, [loadOrders]);
 
+  // Показать успех после регистрации через букинг
+  useEffect(() => {
+    if (sessionStorage.getItem('just_booked')) {
+      sessionStorage.removeItem('just_booked');
+      setTimeout(() => setBookingSuccess(true), 300);
+    }
+  }, []);
+
   const handleAction = async (orderId: string, action: string, body?: Record<string, unknown>) => {
     const token = localStorage.getItem('token');
-    const res = await fetch(`/api/orders/${orderId}/${action}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token!}` },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (res.ok) loadOrders();
+    setActingId(orderId);
+    try {
+      // Оптимистичное обновление статуса — UI реагирует мгновенно
+      const optimisticStatus = actionToStatus(action);
+      if (optimisticStatus) {
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: optimisticStatus } : o));
+      }
+      const res = await fetch(`/api/orders/${orderId}/${action}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token!}` },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      // Всегда перезагружаем — сервер возвращает актуальное состояние
+      loadOrders();
+      if (!res.ok) {
+        // Откат при ошибке делается через loadOrders (сервер вернёт старый статус)
+      }
+    } finally {
+      setActingId(null);
+    }
   };
+
+  const isActing = (id: string) => actingId === id;
+
+  if (bookingSuccess) return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background" onClick={() => setBookingSuccess(false)}>
+      <div className="text-center p-8 max-w-sm">
+        <div className="text-6xl mb-6">✅</div>
+        <h2 className="text-2xl font-bold mb-3">Запись создана!</h2>
+        <p className="text-muted-foreground mb-8 leading-relaxed">Мастер получит уведомление и подтвердит запись. Вы можете отслеживать статус на этой странице.</p>
+        <button onClick={() => setBookingSuccess(false)} className="rounded-full bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
+          Понятно
+        </button>
+      </div>
+    </div>
+  );
 
   if (loading) return <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
   if (!orders.length) return (
@@ -191,7 +230,7 @@ export function BookingsTab() {
                       <div className="text-sm font-medium truncate">{o._design.title}</div>
                     </div>
                     {o.nailDesignId && (
-                      <a href={`/designs/${o.nailDesignId}`} className="ml-auto shrink-0 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary hover:bg-primary/20">Смотреть</a>
+                      <a href={`/explore/${o.nailDesignId}`} className="ml-auto shrink-0 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary hover:bg-primary/20">Смотреть</a>
                     )}
                   </div>
                 )}
@@ -230,38 +269,55 @@ export function BookingsTab() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 pt-1">
-                  {isMaster && o.status === 'pending' && (
-                    <>
-                      <button onClick={() => handleAction(o.id, 'confirm')} className="flex items-center gap-1.5 rounded-full bg-secondary/10 px-4 py-2 text-xs font-semibold text-secondary hover:bg-secondary/20 transition-colors">
-                        <Check className="h-4 w-4" />Подтвердить
+                {isActing(o.id) ? (
+                  <div className="flex justify-center py-2"><div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>
+                ) : (
+                  <div className="flex gap-2 pt-1 flex-wrap">
+                    {isMaster && o.status === 'pending' && (
+                      <>
+                        <button onClick={() => handleAction(o.id, 'confirm')} className="flex items-center gap-1.5 rounded-full bg-secondary/10 px-4 py-2 text-xs font-semibold text-secondary hover:bg-secondary/20 transition-colors">
+                          <Check className="h-4 w-4" />Подтвердить
+                        </button>
+                        {/*<button onClick={() => handleAction(o.id, 'propose-time', { proposedDateTime: prompt('Новая дата и время (ГГГГ-ММ-ДДTЧЧ:ММ):', new Date(Date.now() + 86400000).toISOString().slice(0, 16)) })} className="flex items-center gap-1.5 rounded-full bg-gold/10 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/20 transition-colors">
+                          <Clock className="h-4 w-4" />Время
+                        </button>*/}
+                        <button onClick={() => handleAction(o.id, 'decline')} className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-4 py-2 text-xs font-semibold text-destructive hover:bg-destructive/20 transition-colors">
+                          <X className="h-4 w-4" />Отклонить
+                        </button>
+                      </>
+                    )}
+                    {isMaster && o.status === 'confirmed' && !isPast && (
+                      <button onClick={() => handleAction(o.id, 'complete')} className="flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors">
+                        <Timer className="h-4 w-4" />Завершить
                       </button>
-                      <button onClick={() => handleAction(o.id, 'decline')} className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-4 py-2 text-xs font-semibold text-destructive hover:bg-destructive/20 transition-colors">
-                        <X className="h-4 w-4" />Отклонить
+                    )}
+                    {!isMaster && o.status === 'alternative_proposed' && (
+                      <>
+                        <button onClick={() => handleAction(o.id, 'confirm')} className="flex items-center gap-1.5 rounded-full bg-secondary/10 px-4 py-2 text-xs font-semibold text-secondary hover:bg-secondary/20 transition-colors">
+                          <Check className="h-4 w-4" />Принять
+                        </button>
+                        <button onClick={() => handleAction(o.id, 'decline')} className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-4 py-2 text-xs font-semibold text-destructive hover:bg-destructive/20 transition-colors">
+                          <X className="h-4 w-4" />Отклонить
+                        </button>
+                      </>
+                    )}
+                    {!isMaster && ['pending', 'confirmed'].includes(o.status) && (
+                      <button onClick={() => handleAction(o.id, 'cancel')} className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-4 py-2 text-xs font-semibold text-destructive hover:bg-destructive/20 transition-colors">
+                        <X className="h-4 w-4" />Отменить
                       </button>
-                    </>
-                  )}
-                  {isMaster && o.status === 'confirmed' && !isPast && (
-                    <button onClick={() => handleAction(o.id, 'complete')} className="flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors">
-                      <Timer className="h-4 w-4" />Завершить
-                    </button>
-                  )}
-                  {!isMaster && ['pending', 'confirmed'].includes(o.status) && (
-                    <button onClick={() => handleAction(o.id, 'cancel')} className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-4 py-2 text-xs font-semibold text-destructive hover:bg-destructive/20 transition-colors">
-                      <X className="h-4 w-4" />Отменить
-                    </button>
-                  )}
-                  {o.status === 'completed' && o.nailDesignId && (
-                    <a href={`/designs/${o.nailDesignId}`} className="flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors">
-                      <Palette className="h-4 w-4" />Смотреть дизайн
-                    </a>
-                  )}
-                  {!isMaster && o.status === 'completed' && !o.rating && (
-                    <button onClick={() => setReviewMaster({ id: o.nailMasterId, name: '' })} className="flex items-center gap-1.5 rounded-full bg-gold/10 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/20 transition-colors">
-                      <Star className="h-4 w-4" />Оставить отзыв
-                    </button>
-                  )}
-                </div>
+                    )}
+                    {o.status === 'completed' && o.nailDesignId && (
+                      <a href={`/explore/${o.nailDesignId}`} className="flex items-center gap-1.5 rounded-full bg-primary/10 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors">
+                        <Palette className="h-4 w-4" />Смотреть дизайн
+                      </a>
+                    )}
+                    {!isMaster && o.status === 'completed' && !o.rating && (
+                      <button onClick={() => setReviewMaster({ id: o.nailMasterId, name: '' })} className="flex items-center gap-1.5 rounded-full bg-gold/10 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/20 transition-colors">
+                        <Star className="h-4 w-4" />Оставить отзыв
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -302,5 +358,17 @@ function statusDescription(status: string): string {
     case 'completed': return 'Заказ выполнен. Спасибо, что выбрали нас!';
     case 'cancelled': return 'Заказ отменён.';
     default: return '';
+  }
+}
+
+/** Оптимистичный статус для мгновенного обновления UI */
+function actionToStatus(action: string): string | null {
+  switch (action) {
+    case 'confirm': return 'confirmed';
+    case 'decline': return 'declined';
+    case 'cancel': return 'cancelled';
+    case 'complete': return 'completed';
+    case 'propose-time': return 'alternative_proposed';
+    default: return null;
   }
 }
