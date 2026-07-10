@@ -76,13 +76,26 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
   const [designSearch, setDesignSearch] = useState('');
   const [designsVisible, setDesignsVisible] = useState(9);
 
-  // Preselect design when coming from TikTok card (designs load async)
+  // Refs for auto-scrolling to new sections on mobile
+  const dateRef = useRef<HTMLDivElement>(null);
+  const timeRef = useRef<HTMLDivElement>(null);
+  const notesRef = useRef<HTMLDivElement>(null);
+
+  // Double-rAF scroll — guarantees the DOM is painted before we measure
+  const scrollToRef = (ref: React.RefObject<HTMLDivElement | null>) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  };
+
+  // Preselect design when arriving from TikTok card
   useEffect(() => {
-    if (preselectedDesignId && designs.length > 0 && !selectedDesign) {
+    if (preselectedDesignId && designs.length > 0) {
       const found = (designs as DesignItem[]).find((d) => d.id === preselectedDesignId);
-      if (found) {
+      if (found && selectedDesign?.id !== found.id) {
         setSelectedDesign(found);
-        // Reset search in case the preselected design is outside visible range
         setDesignsVisible((v) => {
           const idx = (designs as DesignItem[]).indexOf(found);
           return Math.max(v, idx + 1);
@@ -91,15 +104,10 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
     }
   }, [preselectedDesignId, designs, selectedDesign]);
 
-  // Refs for auto-scrolling to new sections on mobile
-  const dateRef = useRef<HTMLDivElement>(null);
-  const timeRef = useRef<HTMLDivElement>(null);
-  const notesRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll to newly appeared sections
-  useEffect(() => { if (selectedDesign) dateRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, [selectedDesign]);
-  useEffect(() => { if (selectedDate) timeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, [selectedDate]);
-  useEffect(() => { if (selectedTime) notesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, [selectedTime]);
+  // Scroll to newly appeared sections (double-rAF prevents race with DOM commit)
+  useEffect(() => { if (selectedDesign) scrollToRef(dateRef); }, [selectedDesign]);
+  useEffect(() => { if (selectedDate) scrollToRef(timeRef); }, [selectedDate]);
+  useEffect(() => { if (selectedTime) scrollToRef(notesRef); }, [selectedTime]);
 
   const dates = slotDates(availableSlots);
   const timesForDate = selectedDate ? slotTimes(availableSlots, selectedDate) : [];
@@ -185,14 +193,7 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
             >
               Готово
             </button>
-            <button
-              onClick={() => { onClose(); router.push(`/masters/${masterId}`); }}
-              className="w-full flex items-center justify-center gap-1.5 rounded-full border border-border/60 px-6 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Ещё дизайны этого мастера
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
+           
           </div>
         </div>
       </div>

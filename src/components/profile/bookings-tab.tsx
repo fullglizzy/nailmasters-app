@@ -283,7 +283,7 @@ function OrderCard({ order: o, isMaster, isExpanded, isActing, onToggle, onActio
 
       {/* ═══ Expanded detail ═══ */}
       {isExpanded && (
-        <div className="border-t border-border/30 p-4 space-y-3 bg-muted/20 animate-in fade-in slide-in-from-top-1 duration-200">
+        <div className="border-t border-border/30 p-4 space-y-3 bg-card/20 animate-in fade-in slide-in-from-top-1 duration-200">
           {/* Design link — full row, opens new tab */}
           {designId && (
             <Link

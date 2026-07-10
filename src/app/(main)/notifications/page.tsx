@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Bell, Check, ArrowLeft, ShoppingBag, Star, MessageCircle, Sparkles, Clock, Shield, CalendarCheck, XCircle, AlertTriangle } from 'lucide-react';
@@ -80,16 +80,6 @@ export default function NotificationsPage() {
   const queryClient = useQueryClient();
   const { data: notifs = [], isLoading } = useNotifications();
   const [showRead, setShowRead] = useState(false);
-
-  // SSE — real-time new notifications
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    const es = new EventSource(`/api/notifications/stream?token=${encodeURIComponent(token)}`);
-    es.onmessage = () => queryClient.invalidateQueries({ queryKey: notificationKeys.all });
-    es.onerror = () => {};
-    return () => es.close();
-  }, [queryClient]);
 
   const markRead = async (id?: string) => {
     const token = localStorage.getItem('token');
