@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 export const POST = withAuth(async (req: NextRequest) => {
   const user = (req as AuthenticatedRequest).user!;
   if (user.role !== 'client') return errorResponse('Только клиенты могут оценивать', 403);
-  if (user.isGuest) return errorResponse('Гости не могут оставлять отзывы. Зарегистрируйтесь.', 403);
+  if (user.isGuest) return errorResponse('Гости не могут оставлять отзывы.', 403);
 
   const body = await req.json();
   const parsed = createRatingSchema.safeParse(body);

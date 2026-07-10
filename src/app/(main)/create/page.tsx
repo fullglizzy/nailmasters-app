@@ -189,8 +189,14 @@ export default function CreateDesignPage() {
 
   const canGoNext = () => {
     if (step === 1) return media.length > 0;
-    if (step === 2) return title.trim().length > 0;
+    if (step === 2) return title.trim().length >= 3;
     return true;
+  };
+
+  const stepError = () => {
+    if (step === 1 && media.length === 0) return 'Добавьте хотя бы одно фото или видео';
+    if (step === 2 && title.trim().length < 3) return 'Название должно быть не менее 3 символов';
+    return null;
   };
 
   // ── Derived ─────────────────────────────────────────
@@ -446,7 +452,12 @@ export default function CreateDesignPage() {
         )}
 
         {/* ── Navigation ── */}
-        <div className="flex gap-3 mt-6">
+        {stepError() && (
+          <div className="mt-4 rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive flex items-start gap-2">
+            <X className="h-4 w-4 shrink-0 mt-0.5" />{stepError()}
+          </div>
+        )}
+        <div className="flex gap-3 mt-4">
           {step > 1 && (
             <button type="button" onClick={() => setStep((s) => s - 1)}
               className="flex items-center gap-1.5 rounded-full border border-border/60 px-5 py-2.5 text-sm font-medium hover:bg-surface transition-colors">
@@ -454,7 +465,7 @@ export default function CreateDesignPage() {
             </button>
           )}
           {step < 4 ? (
-            <button type="button" onClick={() => setStep((s) => s + 1)} disabled={!canGoNext()}
+            <button type="button" onClick={() => { if (canGoNext()) setStep((s) => s + 1); }}
               className="flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all ml-auto">
               Далее<ChevronRight className="h-4 w-4" />
             </button>

@@ -1,5 +1,5 @@
 import { db, schema } from '@/lib/db';
-import { sql, SQL, and, or, eq, gte, desc, ilike } from 'drizzle-orm';
+import { sql, SQL, and, or, eq, gte, desc, ilike, inArray } from 'drizzle-orm';
 import type { DesignFilters } from './validators';
 
 // Полнотекстовый поиск дизайнов с использованием PostgreSQL tsvector
@@ -101,7 +101,6 @@ export async function searchMasters(params: {
 
   const conditions: SQL[] = [
     eq(schema.masterProfiles.isActive, true),
-    eq(schema.masterProfiles.isModerated, true),
   ];
 
   if (query) {
@@ -133,8 +132,35 @@ export async function searchMasters(params: {
 
   const total = totalResult[0]?.count ?? 0;
 
+  // Enrich with min price from "can do" designs
+  const masterIds = masters.map((m) => m.userId);
+  const designPrices = masterIds.length > 0
+    ? await db
+        .select({
+          masterId: schema.masterDesigns.nailMasterId,
+          price: schema.masterDesigns.customPrice,
+        })
+        .from(schema.masterDesigns)
+        .where(inArray(schema.masterDesigns.nailMasterId, masterIds))
+    : [];
+
+  const minPriceMap = new Map<string, number>();
+  designPrices.forEach((r) => {
+    if (r.price != null) {
+      const p = parseFloat(r.price.toString());
+      if (!isNaN(p) && (!minPriceMap.has(r.masterId) || p < minPriceMap.get(r.masterId)!)) {
+        minPriceMap.set(r.masterId, p);
+      }
+    }
+  });
+
+  const enriched = masters.map((m) => ({
+    ...m,
+    minDesignPrice: minPriceMap.get(m.userId) || null,
+  }));
+
   return {
-    masters,
+    masters: enriched,
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
 }

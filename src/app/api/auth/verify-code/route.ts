@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db, schema } from '@/lib/db';
 import { eq, and, gt } from 'drizzle-orm';
-import { generateAccessToken, generateRefreshToken, setRefreshTokenCookie } from '@/lib/auth';
+import { generateAccessToken, generateRefreshToken, setRefreshTokenCookie, extractToken, verifyAccessToken } from '@/lib/auth';
 import { successResponse, errorResponse } from '@/lib/response';
 import { logger } from '@/lib/logger';
 import { v4 as uuid } from 'uuid';
@@ -51,7 +51,7 @@ export const POST = async (req: NextRequest) => {
       eq(schema.smsCodes.phone, phone),
       eq(schema.smsCodes.code, code),
       eq(schema.smsCodes.used, false),
-      gt(schema.smsCodes.expiresAt, new Date(Date.now() - 30_000)), // запас 30 сек
+      gt(schema.smsCodes.expiresAt, new Date(Date.now() - 30_000)),
     ))
     .orderBy(schema.smsCodes.createdAt)
     .limit(1);
@@ -63,52 +63,77 @@ export const POST = async (req: NextRequest) => {
 
   console.log(`[SMS] VERIFY OK: phone=${phone}`);
 
-  // Ищем пользователя
-  const existing = await db.select().from(schema.users).where(eq(schema.users.phone, phone)).limit(1);
-  const isNew = !existing.length || existing[0].isGuest;
+  // ── Ищем гостя по токену (если гость уже авторизован) ──
+  const authHeader = req.headers.get('authorization');
+  const guestToken = extractToken(authHeader);
+  let guestUser: typeof schema.users.$inferSelect | null = null;
+
+  if (guestToken) {
+    const guestPayload = await verifyAccessToken(guestToken);
+    if (guestPayload?.isGuest) {
+      const [found] = await db.select().from(schema.users)
+        .where(eq(schema.users.id, guestPayload.userId))
+        .limit(1);
+      if (found?.isGuest) guestUser = found;
+    }
+  }
+
   const hasName = !!body.fullName?.trim();
   let user: typeof schema.users.$inferSelect;
+  const role = body.role || 'client';
+  const username = `user_${uuid().slice(0, 8)}`;
+  let isNew = true; // новый пользователь или конвертация гостя
 
-  if (!existing.length) {
-    // Новый пользователь
-    const role = body.role || 'client';
-    const username = `user_${uuid().slice(0, 8)}`;
-    const [newUser] = await db.insert(schema.users).values({ phone, username, role, isGuest: false }).returning();
-    user = newUser;
+  if (guestUser) {
+    // ── Гость с токеном вводит телефон ──
+    // Проверяем, не принадлежит ли этот телефон зарегистрированному пользователю
+    const phoneOwner = await db.select().from(schema.users)
+      .where(and(eq(schema.users.phone, phone), eq(schema.users.isGuest, false)))
+      .limit(1);
 
-    // Всегда создаём профиль (имя можно добавить позже)
-    const profileName = body.fullName?.trim() || null;
-    if (role === 'nailmaster') {
-      await db.insert(schema.masterProfiles).values({ userId: user.id, fullName: profileName || 'Мастер', phone }).onConflictDoNothing();
+    if (phoneOwner.length > 0 && phoneOwner[0].id !== guestUser.id) {
+      // Телефон привязан к существующему аккаунту → входим в него.
+      // Гость подтвердил доступ к телефону через SMS — это безопасно.
+      if (phoneOwner[0].blocked) return errorResponse('Аккаунт заблокирован', 403);
+      user = phoneOwner[0];
+      isNew = false; // входим в существующий аккаунт, а не создаём новый
+      console.log(`[AUTH] Guest ${guestUser.id} logged into existing account ${user.id} via phone ${phone}`);
     } else {
-      await db.insert(schema.clientProfiles).values({ userId: user.id, fullName: profileName, phone }).onConflictDoNothing();
-    }
-  } else if (existing[0].isGuest) {
-    // Конвертация гостя
-    const role = body.role || 'client';
-    const username = `user_${uuid().slice(0, 8)}`;
-    const [updated] = await db.update(schema.users).set({ phone, username, role, isGuest: false })
-      .where(eq(schema.users.id, existing[0].id)).returning();
-    user = updated;
-
-    const profileName = body.fullName?.trim() || null;
-    if (role === 'nailmaster') {
-      await db.insert(schema.masterProfiles).values({ userId: user.id, fullName: profileName || 'Мастер', phone }).onConflictDoNothing();
-    } else {
-      await db.insert(schema.clientProfiles).values({ userId: user.id, fullName: profileName, phone }).onConflictDoNothing();
+      // Телефон новый или принадлежит этому же гостю → конвертируем гостя
+      const [updated] = await db.update(schema.users)
+        .set({ phone, username, role, isGuest: false })
+        .where(eq(schema.users.id, guestUser.id))
+        .returning();
+      user = updated;
+      console.log(`[AUTH] Guest converted: id=${user.id}, phone=${phone}, role=${role}`);
     }
   } else {
-    user = existing[0];
-    if (user.blocked) return errorResponse('Аккаунт заблокирован', 403);
+    // ── Стандартный путь: ищем по телефону ──
+    const existing = await db.select().from(schema.users).where(eq(schema.users.phone, phone)).limit(1);
 
-    // Существующий пользователь — возможно, обновляет профиль (шаг 3)
-    if (hasName) {
-      if (user.role === 'nailmaster') {
-        await db.update(schema.masterProfiles).set({ fullName: body.fullName!.trim() })
-          .where(eq(schema.masterProfiles.userId, user.id));
-      } else {
-        await db.update(schema.clientProfiles).set({ fullName: body.fullName!.trim() })
-          .where(eq(schema.clientProfiles.userId, user.id));
+    if (!existing.length) {
+      // Новый пользователь — только users, профиль создаст PUT /api/auth/profile
+      const [newUser] = await db.insert(schema.users).values({ phone, username, role, isGuest: false }).returning();
+      user = newUser;
+    } else if (existing[0].isGuest) {
+      // Гость найден по телефону (напр. если токен не был передан) — только users
+      const [updated] = await db.update(schema.users).set({ phone, username, role, isGuest: false })
+        .where(eq(schema.users.id, existing[0].id)).returning();
+      user = updated;
+    } else {
+      user = existing[0];
+      isNew = false; // существующий зарегистрированный пользователь
+      if (user.blocked) return errorResponse('Аккаунт заблокирован', 403);
+
+      // Существующий пользователь — обновляем имя если передано
+      if (hasName) {
+        if (user.role === 'nailmaster') {
+          await db.update(schema.masterProfiles).set({ fullName: body.fullName!.trim() })
+            .where(eq(schema.masterProfiles.userId, user.id));
+        } else {
+          await db.update(schema.clientProfiles).set({ fullName: body.fullName!.trim() })
+            .where(eq(schema.clientProfiles.userId, user.id));
+        }
       }
     }
   }

@@ -14,6 +14,7 @@ import { DistanceBadge } from '@/components/shared/distance-badge';
 import { useGeolocation } from '@/hooks/use-geolocation';
 import { formatDisplayAddress } from '@/lib/utils';
 import { useMaster, useMasterDesigns, useMasterReviews, masterKeys } from '@/hooks/api';
+import { useAuthState } from '@/components/providers/guest-provider';
 import { useLikedIds } from '@/hooks/use-liked-ids';
 import type { Design, Rating } from '@/lib/types';
 
@@ -25,13 +26,16 @@ export default function MasterProfilePage() {
   const [showBooking, setShowBooking] = useState(!!bookDesignId);
   const [showReview, setShowReview] = useState(false);
   const [reviewRefreshKey, setReviewRefreshKey] = useState(0);
+  const { role } = useAuthState();
   const { coords: clientCoords, request: requestGeo } = useGeolocation();
-  // Мастер не может записаться сам к себе
+  // Мастер не может записаться ни к кому — он поставщик услуг, а не клиент.
+  // Также нельзя записаться к самому себе.
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   useEffect(() => {
     try { setCurrentUserId(JSON.parse(localStorage.getItem('user') || '{}').id || null); } catch {}
   }, []);
   const isOwnProfile = currentUserId === id;
+  const canBook = !isOwnProfile && role !== 'nailmaster';
 
   // Запрашиваем геолокацию при загрузке страницы
   useEffect(() => { requestGeo(); }, []);
@@ -184,7 +188,7 @@ export default function MasterProfilePage() {
                 </div>
 
                 {/* Sticky mobile CTAs — только для клиентов, не для самого мастера */}
-                {!isOwnProfile && (
+                {canBook && (
                   <div className="fixed bottom-20 md:hidden left-4 right-4 z-30 flex gap-2">
                     {/*<Link
                       href={`/messages?with=${master.userId}&name=${encodeURIComponent(master.fullName)}`}
@@ -196,7 +200,7 @@ export default function MasterProfilePage() {
                       onClick={() => setShowBooking(true)}
                       className="flex-1 rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg"
                     >
-                      Записаться{master.startingPrice ? ` · от ${parseInt(String(master.startingPrice)).toLocaleString('ru-RU')} ₽` : ''}
+                      Записаться{master.startingPrice ? ` · от $${parseInt(String(master.startingPrice)).toLocaleString('en-US')}` : ''}
                     </button>
                   </div>
                 )}
@@ -222,7 +226,7 @@ export default function MasterProfilePage() {
         </div>
 
         {/* ── Booking CTA ── */}
-        {!isOwnProfile && (
+        {canBook && (
           <section className="mb-8">
             <div className="mb-4 flex items-end justify-between">
               <div>
@@ -239,17 +243,7 @@ export default function MasterProfilePage() {
 
         {/* ── Designs ── */}
         {designs.length > 0 && (
-          <section className="mb-8">
-            <div className="mb-4">
-              <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-1">Портфолио</p>
-              <h2 className="font-display text-2xl">Дизайны мастера</h2>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {designs.map((d, i) => (
-                <DesignCard key={d.id} design={d} href={`/explore/${d.id}`} delay={Math.min(i * 40, 300)} isLiked={likedIds.has(d.id)} />
-              ))}
-            </div>
-          </section>
+          <DesignsSection designs={designs as Design[]} likedIds={likedIds} />
         )}
 
         {/* ── Empty portfolio ── */}
@@ -355,6 +349,46 @@ function MasterReviews({ masterId, onReviewClick, refreshKey }: { masterId: stri
           </div>
         ))}
       </div>
+      )}
+    </section>
+  );
+}
+
+/* ── Designs section with load-more ─────────────────────── */
+
+const DESIGNS_PER_PAGE = 12;
+
+function DesignsSection({ designs, likedIds }: { designs: Design[]; likedIds: Set<string> }) {
+  const [visible, setVisible] = useState(DESIGNS_PER_PAGE);
+
+  const shown = designs.slice(0, visible);
+  const hasMore = visible < designs.length;
+
+  return (
+    <section className="mb-8">
+      <div className="mb-4">
+        <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-1">Портфолио</p>
+        <h2 className="font-display text-2xl">
+          Дизайны мастера
+          <span className="text-sm font-sans font-normal text-muted-foreground ml-2">
+            {designs.length}
+          </span>
+        </h2>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {shown.map((d, i) => (
+          <DesignCard key={d.id} design={d} href={`/explore/${d.id}`} delay={Math.min(i * 40, 300)} isLiked={likedIds.has(d.id)} />
+        ))}
+      </div>
+      {hasMore && (
+        <div className="mt-4 text-center">
+          <button
+            onClick={() => setVisible((v) => Math.min(v + DESIGNS_PER_PAGE, designs.length))}
+            className="rounded-full border border-border/60 px-5 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            Показать ещё ({designs.length - visible})
+          </button>
+        </div>
       )}
     </section>
   );

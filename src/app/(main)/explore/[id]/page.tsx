@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
   Heart, MessageCircle, Eye, CalendarCheck, Share2, Volume2, VolumeX,
-  ChevronUp, ChevronDown, ArrowLeft, Play, Sparkles, X,
+  ChevronUp, ChevronDown, ArrowLeft, Play, Sparkles, X, Check,
 } from 'lucide-react';
 import { useAuthState } from '@/components/providers/guest-provider';
 import { useLike } from '@/hooks/use-like';
@@ -17,7 +17,7 @@ import { MastersListModal } from '@/components/design/masters-list-modal';
 import { ShareModal } from '@/components/design/share-modal';
 import type { FeedDesign } from '@/lib/types';
 
-// ── Helpers ──────────────────────────────────────────────
+/* ── Helpers ────────────────────────────────────────────── */
 
 function getAllMedia(design: FeedDesign): { type: 'video' | 'image'; url: string }[] {
   const m: { type: 'video' | 'image'; url: string }[] = [];
@@ -26,50 +26,265 @@ function getAllMedia(design: FeedDesign): { type: 'video' | 'image'; url: string
   return m;
 }
 
-// ── Page ─────────────────────────────────────────────────
+/** Returns the lowest price among masters offering this design, if known. */
+function getMinPrice(design: FeedDesign): number | null {
+  const raw = (design as Record<string, unknown>)._minPrice || (design as Record<string, unknown>)._masterPrice;
+  if (!raw) return null;
+  const n = parseInt(String(raw));
+  return n > 0 ? n : null;
+}
+
+/* ── Memoized sub-components ────────────────────────────── */
+
+interface LikeButtonProps {
+  designId: string;
+  likesCount: number;
+  isLiked: boolean;
+}
+
+const LikeButton = memo(function LikeButton({ designId, likesCount, isLiked: isLikedProp }: LikeButtonProps) {
+  const { isLiked, likesCount: count, handleLike } = useLike({
+    designId,
+    initialLikesCount: likesCount,
+    initialIsLiked: isLikedProp,
+  });
+  return (
+    <button onClick={handleLike} className="flex flex-col items-center gap-0 group">
+      <div className="transition-all group-hover:scale-110 group-active:scale-95">
+        <Heart className={`h-8 w-8 text-white drop-shadow-sm ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
+      </div>
+      <span className="text-[11px] text-white font-medium">{count}</span>
+    </button>
+  );
+});
+
+interface SideBtnProps {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  subtitle?: string;
+  onClick: () => void;
+}
+
+const SideBtn = memo(function SideBtn({ icon: Icon, label, subtitle, onClick }: SideBtnProps) {
+  return (
+    <button onClick={onClick} className="flex flex-col items-center gap-0 group">
+      <div className="transition-all group-hover:scale-110 group-active:scale-95">
+        <Icon className="h-8 w-8 text-white drop-shadow-sm" />
+      </div>
+      <span className="text-[11px] text-white font-medium text-center whitespace-nowrap leading-tight">
+        {label}
+      </span>
+      {subtitle && (
+        <span className="text-[10px] text-white/70 font-medium">{subtitle}</span>
+      )}
+    </button>
+  );
+});
+
+interface NavBtnProps {
+  onClick: () => void;
+  disabled: boolean;
+  children: React.ReactNode;
+}
+
+const NavBtn = memo(function NavBtn({ onClick, disabled, children }: NavBtnProps) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="w-[50px] h-[50px] rounded-full bg-white/10 backdrop-blur border border-white/20 text-foreground flex items-center justify-center hover:bg-white/20 hover:scale-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg"
+    >
+      {children}
+    </button>
+  );
+});
+
+/* ── "Я так могу" modal (lazy-fetched on open) ──────────── */
+
+const CanDoModal = memo(function CanDoModal({ designId, onClose, onChange }: {
+  designId: string; onClose: () => void; onChange?: (added: boolean) => void;
+}) {
+  const [added, setAdded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [price, setPrice] = useState('');
+  const [duration, setDuration] = useState('');
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    fetch(`/api/masters/can-do/${designId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) {
+          setAdded(json.data.canDo);
+          if (json.data.price) setPrice(String(json.data.price));
+          if (json.data.duration) setDuration(String(json.data.duration));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [designId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    const token = localStorage.getItem('token');
+    try {
+      const body: Record<string, unknown> = {};
+      if (price) body.customPrice = String(parseInt(price) || 0);
+      if (duration) body.estimatedDuration = parseInt(duration) || 0;
+      await fetch(`/api/masters/can-do/${designId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      setAdded(true);
+      onChange?.(true);
+      setSuccess(true);
+    } catch { /* ignore */ }
+    finally { setSaving(false); }
+  };
+
+  const handleRemove = async () => {
+    setSaving(true);
+    const token = localStorage.getItem('token');
+    try {
+      await fetch(`/api/masters/can-do/${designId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setAdded(false); setPrice(''); setDuration('');
+      onChange?.(false);
+      onClose();
+    } catch { /* ignore */ }
+    finally { setSaving(false); }
+  };
+
+  /* ── Success screen ──────────────────────────────── */
+  if (success) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
+        <div className="fixed inset-0 bg-black/50 animate-in fade-in duration-200" />
+        <div className="relative z-10 w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl bg-background p-8 shadow-xl text-center" onClick={(e) => e.stopPropagation()}>
+          <div className="text-5xl mb-4">✅</div>
+          <h3 className="text-xl font-bold mb-2">Дизайн добавлен!</h3>
+          <p className="text-sm text-muted-foreground mb-6">
+            Клиенты увидят этот дизайн в вашем профиле и смогут записаться
+          </p>
+          <button onClick={onClose} className="rounded-full bg-primary px-8 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
+            Готово
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="fixed inset-0 bg-black/50 animate-in fade-in duration-200" />
+      <div className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-background p-6 shadow-xl modal-enter" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="font-bold text-lg">{added ? 'Изменить условия' : 'Я так могу'}</h2>
+            <p className="text-xs text-muted-foreground">Укажите цену и время для этого дизайна</p>
+          </div>
+          <button onClick={onClose} className="rounded-full p-1.5 hover:bg-muted/50"><X className="h-5 w-5" /></button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-8"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Цена ($)</label>
+              <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" min="10" max="100000" placeholder="30" autoFocus
+                className="w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Время (мин)</label>
+              <input value={duration} onChange={(e) => setDuration(e.target.value)} type="number" min="15" max="480" step="15" placeholder="60"
+                className="w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+          </div>
+        )}
+        <div className="flex gap-2 mt-6">
+          {added && (
+            <button onClick={handleRemove} className="flex-1 rounded-full border border-destructive/30 bg-destructive/10 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/20">
+              Убрать из моих
+            </button>
+          )}
+          <button onClick={handleSave} disabled={saving || loading} className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            {saving ? 'Сохранение...' : 'Сохранить'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+/* ═════════════════════════════════════════════════════════
+   Page
+   ═════════════════════════════════════════════════════════ */
+
+// Number of adjacent cards to preload media for
+const PRELOAD_WINDOW = 2;
 
 export default function TikTokFeedPage() {
   const { id: startId } = useParams<{ id: string }>();
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const videoRefs = useRef<Map<string, HTMLVideoElement | null>>(new Map());
   const currentIndexRef = useRef(0);
   const urlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasScrolledToStart = useRef(false);
+  const rafRef = useRef(0);
+  const scrollAccumRef = useRef(0);
 
   const { role } = useAuthState();
 
-  // ── Data: single RQ query, cached & deduplicated ──────
   const { data: designs = [], isLoading } = useDesigns({
     sort: 'popular',
     includeOwn: true,
     limit: 40,
   });
 
-  // Batch liked state — 1 API call, not N
   const likedIds = useLikedIds();
 
-  // ── Local UI state ────────────────────────────────────
   const [currentIndex, setCurrentIndex] = useState(0);
   const [mediaIdx, setMediaIdx] = useState<Record<string, number>>({});
   const [videoMuted, setVideoMuted] = useState<Record<string, boolean>>({});
   const [videoPlaying, setVideoPlaying] = useState<Record<string, boolean>>({});
 
-  // Modals
+  // Modals (one at a time — avoids mounting all)
   const [commentsFor, setCommentsFor] = useState<FeedDesign | null>(null);
   const [detailsFor, setDetailsFor] = useState<FeedDesign | null>(null);
   const [mastersFor, setMastersFor] = useState<FeedDesign | null>(null);
   const [shareFor, setShareFor] = useState<FeedDesign | null>(null);
-  const [commentRefreshKey, setCommentRefreshKey] = useState(0);
   const [canDoDesign, setCanDoDesign] = useState<string | null>(null);
 
-  const goBack = () => {
-    const prev = document.referrer;
-    if (prev && prev.includes(window.location.host)) router.back();
-    else router.push('/');
-  };
+  // Track which designs the master already marked "Я так могу"
+  const [canDoIds, setCanDoIds] = useState<Set<string>>(new Set());
 
-  // ── Init muted state when designs load ─────────────────
+  // Загружаем can-do дизайны мастера с сервера (переживает перезагрузку)
+  useEffect(() => {
+    if (role !== 'nailmaster') return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    fetch('/api/masters/can-do/ids', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setCanDoIds(new Set(json.data));
+        }
+      })
+      .catch(() => {});
+  }, [role]);
+
+  /* ── Init muted state ────────────────────────────────── */
   useEffect(() => {
     if (!designs.length || isLoading) return;
     const muted: Record<string, boolean> = {};
@@ -79,7 +294,7 @@ export default function TikTokFeedPage() {
     setVideoMuted(muted);
   }, [designs, isLoading]);
 
-  // ── Scroll to startId once ─────────────────────────────
+  /* ── Scroll to start design once ─────────────────────── */
   useEffect(() => {
     if (isLoading || !designs.length || !containerRef.current || hasScrolledToStart.current) return;
     const idx = designs.findIndex((d) => d.id === startId);
@@ -92,25 +307,35 @@ export default function TikTokFeedPage() {
     }
   }, [isLoading, designs, startId]);
 
-  // ── Video: pause all except active ─────────────────────
+  /* ── Video: only manage adjacent cards ───────────────── */
   useEffect(() => {
+    const idx = currentIndex;
+    // Pause all videos outside the visible window, play + unmute current
     designs.forEach((d, i) => {
-      const v = videoRefs.current[d.id];
+      const v = videoRefs.current.get(d.id);
       if (!v) return;
-      if (i === currentIndex) {
+      if (i === idx) {
         v.currentTime = 0;
+        v.muted = false;
         v.play().catch(() => {});
         setVideoPlaying((p) => ({ ...p, [d.id]: true }));
         setVideoMuted((p) => ({ ...p, [d.id]: false }));
-      } else {
+      } else if (Math.abs(i - idx) <= PRELOAD_WINDOW) {
+        // Preload adjacent: pause but keep metadata loaded
         v.pause();
+        v.muted = true;
         setVideoPlaying((p) => ({ ...p, [d.id]: false }));
         setVideoMuted((p) => ({ ...p, [d.id]: true }));
+      } else {
+        // Far away: pause + mute (don't need state updates for far cards)
+        v.pause();
+        v.muted = true;
       }
     });
   }, [currentIndex, designs]);
 
-  // ── Navigation ─────────────────────────────────────────
+  /* ── Callbacks (stable references) ───────────────────── */
+
   const updateIndex = useCallback((idx: number) => {
     currentIndexRef.current = idx;
     setCurrentIndex(idx);
@@ -123,33 +348,43 @@ export default function TikTokFeedPage() {
     updateIndex(idx);
   }, [updateIndex]);
 
-  const goNext = () => { if (currentIndex < designs.length - 1) scrollToIndex(currentIndex + 1); };
-  const goPrev = () => { if (currentIndex > 0) scrollToIndex(currentIndex - 1); };
+  const goNext = useCallback(() => {
+    if (currentIndex < designs.length - 1) scrollToIndex(currentIndex + 1);
+  }, [currentIndex, designs.length, scrollToIndex]);
 
-  // ── One-card-at-a-time scroll ──────────────────────────
+  const goPrev = useCallback(() => {
+    if (currentIndex > 0) scrollToIndex(currentIndex - 1);
+  }, [currentIndex, scrollToIndex]);
+
+  const goBack = useCallback(() => {
+    const prev = document.referrer;
+    if (prev && prev.includes(window.location.host)) router.back();
+    else router.push('/');
+  }, [router]);
+
+  /* ── One-card-at-a-time scroll (rAF-throttled) ──────── */
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !designs.length) return;
 
-    let wheelAccum = 0;
-    const THRESHOLD = 50;
+    let touchStartY = 0;
     let scrolling = false;
+    const THRESHOLD = 50;
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       if (scrolling) return;
-      wheelAccum += e.deltaY;
-      if (Math.abs(wheelAccum) >= THRESHOLD) {
+      scrollAccumRef.current += e.deltaY;
+      if (Math.abs(scrollAccumRef.current) >= THRESHOLD) {
         scrolling = true;
-        const direction = wheelAccum > 0 ? 1 : -1;
-        wheelAccum = 0;
+        const direction = scrollAccumRef.current > 0 ? 1 : -1;
+        scrollAccumRef.current = 0;
         const target = currentIndexRef.current + direction;
         if (target >= 0 && target < designs.length) scrollToIndex(target);
         setTimeout(() => { scrolling = false; }, 600);
       }
     };
 
-    let touchStartY = 0;
     const onTouchStart = (e: TouchEvent) => { touchStartY = e.touches[0].clientY; };
     const onTouchEnd = (e: TouchEvent) => {
       if (scrolling) return;
@@ -172,43 +407,50 @@ export default function TikTokFeedPage() {
     };
   }, [designs, scrollToIndex]);
 
-  // ── Scroll tracking + URL sync ─────────────────────────
+  /* ── Scroll tracking + URL sync (rAF-throttled) ─────── */
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !designs.length) return;
 
     const onScroll = () => {
-      const idx = Math.round(el.scrollTop / el.clientHeight);
-      if (idx < 0 || idx >= designs.length) return;
-      if (idx === currentIndexRef.current) return;
-      updateIndex(idx);
+      if (rafRef.current) return;
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0;
+        if (!el) return;
+        const idx = Math.round(el.scrollTop / el.clientHeight);
+        if (idx < 0 || idx >= designs.length) return;
+        if (idx === currentIndexRef.current) return;
+        updateIndex(idx);
 
-      if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
-      urlTimerRef.current = setTimeout(() => {
-        const d = designs[idx];
-        if (d && typeof window !== 'undefined') {
-          window.history.replaceState(null, '', `/explore/${d.id}`);
-        }
-      }, 500);
+        if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
+        urlTimerRef.current = setTimeout(() => {
+          const d = designs[idx];
+          if (d && typeof window !== 'undefined') {
+            window.history.replaceState(null, '', `/explore/${d.id}`);
+          }
+        }, 500);
+      });
     };
 
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       el.removeEventListener('scroll', onScroll);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
     };
   }, [designs, updateIndex]);
 
-  // ── Media interaction ──────────────────────────────────
-  const toggleSound = (designId: string) => {
-    const v = videoRefs.current[designId];
+  /* ── Media interaction callbacks ─────────────────────── */
+
+  const toggleSound = useCallback((designId: string) => {
+    const v = videoRefs.current.get(designId);
     if (!v) return;
     v.muted = !v.muted;
     setVideoMuted((p) => ({ ...p, [designId]: !p[designId] }));
-  };
+  }, []);
 
-  const handleVideoClick = (designId: string, e: React.MouseEvent) => {
-    const v = videoRefs.current[designId];
+  const handleVideoClick = useCallback((designId: string, e: React.MouseEvent) => {
+    const v = videoRefs.current.get(designId);
     if (!v) return;
     const relX = (e.clientX - v.getBoundingClientRect().left) / v.getBoundingClientRect().width;
     if (relX > 0.3 && relX < 0.7) {
@@ -225,9 +467,9 @@ export default function TikTokFeedPage() {
       v.pause();
       setVideoPlaying((p) => ({ ...p, [designId]: false }));
     }
-  };
+  }, [designs, mediaIdx]);
 
-  const handleImageClick = (designId: string, e: React.MouseEvent) => {
+  const handleImageClick = useCallback((designId: string, e: React.MouseEvent) => {
     const d = designs.find((x) => x.id === designId);
     if (!d) return;
     const all = getAllMedia(d as FeedDesign);
@@ -239,14 +481,14 @@ export default function TikTokFeedPage() {
     setMediaIdx((p) => ({ ...p, [designId]: next }));
     if (all[next]?.type === 'video') {
       setTimeout(() => {
-        const v = videoRefs.current[designId];
+        const v = videoRefs.current.get(designId);
         v?.play().catch(() => {});
         setVideoPlaying((p) => ({ ...p, [designId]: true }));
       }, 100);
     }
-  };
+  }, [designs, mediaIdx]);
 
-  // ── Loading / empty ────────────────────────────────────
+  /* ── Loading / empty ─────────────────────────────────── */
   if (isLoading) {
     return (
       <div className="fixed inset-0 bg-background flex items-center justify-center">
@@ -266,8 +508,10 @@ export default function TikTokFeedPage() {
 
   const castDesign = (d: typeof designs[number]): FeedDesign => d as unknown as FeedDesign;
 
+  /* ── Render ──────────────────────────────────────────── */
   return (
     <div className="fixed inset-0 bg-background">
+      {/* Desktop back button */}
       <button onClick={goBack} className="absolute top-4 left-6 z-30 hidden md:flex items-center rounded-full hover:bg-accent transition-colors">
         <ArrowLeft className="h-8 w-8" />
       </button>
@@ -281,6 +525,7 @@ export default function TikTokFeedPage() {
           const curMedia = allMedia[curMediaIdx] || allMedia[0] || { type: 'image' as const, url: '/placeholder.svg' };
           const isVideo = curMedia.type === 'video';
           const playing = videoPlaying[design.id] || false;
+          const minPrice = getMinPrice(design);
 
           return (
             <div key={design.id} className="h-full snap-start flex items-center justify-center p-0 md:p-4">
@@ -295,14 +540,17 @@ export default function TikTokFeedPage() {
                   {isVideo ? (
                     <>
                       <video
-                        ref={(el) => { videoRefs.current[design.id] = el; }}
+                        ref={(el) => { videoRefs.current.set(design.id, el); }}
                         src={curMedia.url}
                         className="w-full h-full object-cover"
-                        loop muted={videoMuted[design.id] ?? false}
-                        playsInline data-design-id={design.id}
+                        loop
+                        muted={videoMuted[design.id] ?? false}
+                        playsInline
+                        data-design-id={design.id}
                         onClick={(e) => handleVideoClick(design.id, e)}
+                        preload="metadata"
                         onLoadedMetadata={() => {
-                          const v = videoRefs.current[design.id];
+                          const v = videoRefs.current.get(design.id);
                           if (!v) return;
                           const idx = designs.findIndex((x) => x.id === design.id);
                           if (idx === currentIndexRef.current) {
@@ -329,6 +577,7 @@ export default function TikTokFeedPage() {
                       sizes="(max-width: 768px) 100vw, 55vh"
                       className="object-cover cursor-pointer"
                       onClick={(e) => handleImageClick(design.id, e)}
+                      priority
                     />
                   )}
 
@@ -340,10 +589,20 @@ export default function TikTokFeedPage() {
                     <LikeButton designId={design.id} likesCount={design.likesCount} isLiked={likedIds.has(design.id)} />
                     <SideBtn icon={MessageCircle} label="Коммент." onClick={() => setCommentsFor(design)} />
                     <SideBtn icon={Eye} label="Подробнее" onClick={() => setDetailsFor(design)} />
-                    {role === 'nailmaster' && (
-                      <SideBtn icon={Sparkles} label="Я так могу" onClick={() => setCanDoDesign(design.id)} />
+                    {role === 'nailmaster' ? (
+                      canDoIds.has(design.id) ? (
+                        <SideBtn icon={Check} label="Добавлено" onClick={() => setCanDoDesign(design.id)} />
+                      ) : (
+                        <SideBtn icon={Sparkles} label="Я так могу" onClick={() => setCanDoDesign(design.id)} />
+                      )
+                    ) : (
+                      <SideBtn
+                        icon={CalendarCheck}
+                        label="Записаться"
+                        subtitle={minPrice ? `от $${minPrice.toLocaleString('en-US')}` : undefined}
+                        onClick={() => setMastersFor(design)}
+                      />
                     )}
-                    <SideBtn icon={CalendarCheck} label="Записаться" onClick={() => setMastersFor(design)} />
                     <SideBtn icon={Share2} label="Поделиться" onClick={() => setShareFor(design)} />
                     {isVideo && (
                       <SideBtn
@@ -393,162 +652,45 @@ export default function TikTokFeedPage() {
 
       {/* Desktop nav arrows */}
       <div className="hidden md:flex fixed right-10 top-1/2 -translate-y-1/2 flex-col gap-4 z-30">
-        <NavBtn onClick={goPrev} disabled={currentIndex === 0}><ChevronUp className="h-[35px] w-[35px]" /></NavBtn>
-        <NavBtn onClick={goNext} disabled={currentIndex >= designs.length - 1}><ChevronDown className="h-[35px] w-[35px]" /></NavBtn>
+        <NavBtn onClick={goPrev} disabled={currentIndex === 0}>
+          <ChevronUp className="h-[35px] w-[35px]" />
+        </NavBtn>
+        <NavBtn onClick={goNext} disabled={currentIndex >= designs.length - 1}>
+          <ChevronDown className="h-[35px] w-[35px]" />
+        </NavBtn>
       </div>
 
-      {/* Modals */}
+      {/* Modals — only one mounted at a time */}
       {commentsFor && (
         <CommentsModal
-          designId={commentsFor.id} designTitle={commentsFor.title}
-          open={!!commentsFor} onClose={() => setCommentsFor(null)}
-          onCommentAdded={() => setCommentRefreshKey((k) => k + 1)}
+          designId={commentsFor.id}
+          designTitle={commentsFor.title}
+          open={!!commentsFor}
+          onClose={() => setCommentsFor(null)}
         />
       )}
-      {detailsFor && <DesignDetailsModal design={detailsFor} open={!!detailsFor} onClose={() => setDetailsFor(null)} />}
-      {mastersFor && <MastersListModal designId={mastersFor.id} designTitle={mastersFor.title} open={!!mastersFor} onClose={() => setMastersFor(null)} />}
-      {shareFor && <ShareModal open={!!shareFor} onClose={() => setShareFor(null)} title={shareFor.title} designId={shareFor.id} />}
-      {canDoDesign && <CanDoModal designId={canDoDesign} onClose={() => setCanDoDesign(null)} />}
+      {detailsFor && (
+        <DesignDetailsModal design={detailsFor} open={!!detailsFor} onClose={() => setDetailsFor(null)} />
+      )}
+      {mastersFor && (
+        <MastersListModal designId={mastersFor.id} designTitle={mastersFor.title} open={!!mastersFor} onClose={() => setMastersFor(null)} />
+      )}
+      {shareFor && (
+        <ShareModal open={!!shareFor} onClose={() => setShareFor(null)} title={shareFor.title} designId={shareFor.id} />
+      )}
+      {canDoDesign && (
+        <CanDoModal
+          designId={canDoDesign}
+          onClose={() => setCanDoDesign(null)}
+          onChange={(added) => {
+            setCanDoIds((prev) => {
+              const next = new Set(prev);
+              added ? next.add(canDoDesign) : next.delete(canDoDesign);
+              return next;
+            });
+          }}
+        />
+      )}
     </div>
-  );
-}
-
-// ── Sub-components ───────────────────────────────────────
-
-/** Like button — uses optimistic hook, zero eager API calls */
-function LikeButton({ designId, likesCount, isLiked: isLikedProp }: { designId: string; likesCount: number; isLiked: boolean }) {
-  const { isLiked, likesCount: count, handleLike } = useLike({
-    designId,
-    initialLikesCount: likesCount,
-    initialIsLiked: isLikedProp,
-  });
-  return (
-    <button onClick={handleLike} className="flex flex-col items-center gap-0 group">
-      <div className="transition-all group-hover:scale-110 group-active:scale-95">
-        <Heart className={`h-8 w-8 text-white ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
-      </div>
-      <span className="text-[11px] text-white font-medium">{count}</span>
-    </button>
-  );
-}
-
-/** "Я так могу" modal — fetches state only when opened, not per card */
-function CanDoModal({ designId, onClose }: { designId: string; onClose: () => void }) {
-  const [added, setAdded] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [price, setPrice] = useState('');
-  const [duration, setDuration] = useState('');
-
-  // Fetch once on open
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    fetch(`/api/masters/can-do/${designId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.success) {
-          setAdded(json.data.canDo);
-          if (json.data.price) setPrice(String(json.data.price));
-          if (json.data.duration) setDuration(String(json.data.duration));
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [designId]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    const token = localStorage.getItem('token');
-    try {
-      const body: Record<string, unknown> = {};
-      if (price) body.customPrice = String(parseInt(price) || 0);
-      if (duration) body.estimatedDuration = parseInt(duration) || 0;
-      await fetch(`/api/masters/can-do/${designId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
-      setAdded(true);
-      onClose();
-    } catch {}
-    finally { setSaving(false); }
-  };
-
-  const handleRemove = async () => {
-    setSaving(true);
-    const token = localStorage.getItem('token');
-    try {
-      await fetch(`/api/masters/can-do/${designId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setAdded(false); setPrice(''); setDuration('');
-      onClose();
-    } catch {}
-    finally { setSaving(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="fixed inset-0 bg-black/50 animate-in fade-in duration-200" />
-      <div className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-background p-6 shadow-xl modal-enter" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="font-bold text-lg">{added ? 'Изменить условия' : 'Я так могу'}</h2>
-            <p className="text-xs text-muted-foreground">Укажите цену и время для этого дизайна</p>
-          </div>
-          <button onClick={onClose} className="rounded-full p-1.5 hover:bg-muted/50"><X className="h-5 w-5" /></button>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center py-8"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Цена (₽)</label>
-              <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" min="100" placeholder="2500" autoFocus
-                className="w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Время (мин)</label>
-              <input value={duration} onChange={(e) => setDuration(e.target.value)} type="number" min="15" step="15" placeholder="60"
-                className="w-full rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-            </div>
-          </div>
-        )}
-        <div className="flex gap-2 mt-6">
-          {added && (
-            <button onClick={handleRemove} className="flex-1 rounded-full border border-destructive/30 bg-destructive/10 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/20">
-              Убрать из моих
-            </button>
-          )}
-          <button onClick={handleSave} disabled={saving || loading} className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-            {saving ? 'Сохранение...' : 'Сохранить'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SideBtn({ icon: Icon, label, onClick }: { icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="flex flex-col items-center gap-0 group">
-      <div className="transition-all group-hover:scale-110 group-active:scale-95">
-        <Icon className="h-8 w-8 text-white" />
-      </div>
-      <span className="text-[11px] text-white font-medium text-center whitespace-nowrap">{label}</span>
-    </button>
-  );
-}
-
-function NavBtn({ children, disabled, onClick }: { children: React.ReactNode; disabled: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick} disabled={disabled}
-      className="w-[50px] h-[50px] rounded-full bg-white/10 backdrop-blur border border-white/20 text-foreground flex items-center justify-center hover:bg-white/20 hover:scale-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-lg">
-      {children}
-    </button>
   );
 }

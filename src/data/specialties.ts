@@ -8,11 +8,10 @@ export const MASTER_SPECIALTIES = [
 
 export type MasterSpecialty = (typeof MASTER_SPECIALTIES)[number];
 
-// Города
+// Города (US — Nominatim geocoding tested)
 export const CITIES = [
-  'Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург',
-  'Казань', 'Нижний Новгород', 'Челябинск', 'Самара',
-  'Омск', 'Ростов-на-Дону',
+  'New York', 'Los Angeles', 'Chicago', 'San Francisco',
+  'Miami', 'Boston', 'Seattle', 'Austin', 'Denver', 'Portland',
 ] as const;
 
 export type City = (typeof CITIES)[number];

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { DesignCard } from '@/components/design/design-card';
 import { MasterCard } from '@/components/master/master-card';
+import { PolishSwatchGrid } from '@/components/shared/polish-swatch';
 import { useDesigns } from '@/hooks/api';
 import { useLikedIds } from '@/hooks/use-liked-ids';
 import { AVAILABLE_COLORS } from '@/data/colors';
@@ -484,7 +485,11 @@ export default function SearchPage() {
 
                     {/* ── Цвет ── */}
                     <FilterGroup icon={Palette} title="Цвет">
-                      <ColorSwatches selected={designFilters.color} onSelect={v => setDesignFilters(f => ({ ...f, color: f.color === v ? '' : v }))} />
+                      <PolishSwatchGrid
+                        colors={AVAILABLE_COLORS}
+                        selected={designFilters.color}
+                        onSelect={(v) => setDesignFilters(f => ({ ...f, color: f.color === v ? '' : v }))}
+                      />
                     </FilterGroup>
 
                     {/* ── Детали: теги, техники, материалы и т.д. ── */}
@@ -548,7 +553,7 @@ export default function SearchPage() {
                               onChange={e => setMasterFilters(f => ({ ...f, minPrice: e.target.value }))}
                               className="w-full rounded-xl border border-border/60 bg-background pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
                             />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">₽</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">$</span>
                           </div>
                         </label>
                         <span className="mt-5 text-sm text-muted-foreground">—</span>
@@ -560,7 +565,7 @@ export default function SearchPage() {
                               onChange={e => setMasterFilters(f => ({ ...f, maxPrice: e.target.value }))}
                               className="w-full rounded-xl border border-border/60 bg-background pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
                             />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">₽</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">$</span>
                           </div>
                         </label>
                       </div>
@@ -832,39 +837,6 @@ function NumberInput({ label, value, onChange }: {
         type="number" min="0" value={value} onChange={e => onChange(e.target.value)}
         className="w-full rounded-xl border border-border/60 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
       />
-    </div>
-  );
-}
-
-function ColorSwatches({ selected, onSelect }: {
-  selected: string; onSelect: (v: string) => void;
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Цвет</label>
-      <div className="flex flex-wrap gap-3">
-        {AVAILABLE_COLORS.map(c => (
-          <button
-            key={c.value}
-            onClick={() => onSelect(c.value)}
-            aria-label={c.name}
-            title={c.name}
-            className="flex flex-col items-center gap-1 group"
-          >
-            <div
-              className={`h-8 w-8 rounded-full border-2 transition-all ${
-                selected === c.value
-                  ? 'border-primary scale-110 ring-2 ring-primary/20'
-                  : 'border-border/40 group-hover:border-primary/40'
-              }`}
-              style={{ backgroundColor: c.hex }}
-            />
-            <span className={`text-[10px] transition-colors ${
-              selected === c.value ? 'font-medium text-primary' : 'text-muted-foreground'
-            }`}>{c.name}</span>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

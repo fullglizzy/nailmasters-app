@@ -24,7 +24,7 @@ export function AppHeader() {
           {[
             { href: '/explore', label: 'Лента' },
             { href: '/trending', label: 'Популярное' },
-            { href: '/search', label: 'Поиск' },
+            { href: '/', label: 'Главная' },
             { href: '/client-info', label: 'Для заказчика' },
             ...(role === 'admin' ? [{ href: '/admin' as string, label: 'Админка' }] : []),
           ].map((item) => (

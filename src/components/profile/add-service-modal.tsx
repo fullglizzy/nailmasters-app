@@ -25,7 +25,9 @@ export function AddServiceModal({ open, onClose, onCreated }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !price || !duration) { setError('Заполните обязательные поля'); return; }
+    if (!name.trim()) { setError('Введите название услуги'); return; }
+    if (!price || Number(price) < 100) { setError('Цена должна быть не менее 100 $'); return; }
+    if (!duration) { setError('Выберите длительность'); return; }
     setSaving(true); setError('');
     const token = localStorage.getItem('token');
     try {
@@ -64,8 +66,8 @@ export function AddServiceModal({ open, onClose, onCreated }: Props) {
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} className={inputClass + ' resize-none'} placeholder="Что входит в услугу..." />
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Цена (₽) *</label>
-            <input value={price} onChange={e => setPrice(e.target.value)} type="number" min="0" required className={inputClass} placeholder="2500" />
+            <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Цена ($) *</label>
+            <input value={price} onChange={e => setPrice(e.target.value)} type="number" min="100" max="100000" required className={inputClass} placeholder="2500" />
           </div>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Длительность *</label>

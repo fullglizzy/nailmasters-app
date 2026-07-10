@@ -33,7 +33,8 @@ function ProfileContent() {
   const handleLogout = () => clearAuth();
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
-  if (!profile) return <div className="flex min-h-screen flex-col items-center justify-center"><h1 className="font-display text-2xl mb-2">Необходима авторизация</h1><Link href="/auth" className="text-primary hover:underline font-medium">Войти</Link></div>;
+  if (!profile) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
+  //<div className="flex min-h-screen flex-col items-center justify-center"><h1 className="font-display text-2xl mb-2">Необходима авторизация</h1><Link href="/auth" className="text-primary hover:underline font-medium">Войти</Link></div>;
 
   const isMaster = profile.role === 'nailmaster';
   const isClient = profile.role === 'client';
@@ -90,10 +91,12 @@ function ProfileContent() {
                 <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-primary/[0.06] ring-2 ring-primary/[0.08]">
                   <span className="font-display text-3xl text-primary">{(profile.fullName || profile.username).charAt(0).toUpperCase()}</span>
                 </div>
+                
               )}
             </div>
             <div className="flex-1 min-w-0">
               <h1 className="font-display text-2xl">{profile.fullName || profile.username}</h1>
+              
               <p className="text-sm text-muted-foreground">@{profile.username}</p>
               <div className="flex items-center gap-3 mt-1.5 text-sm text-muted-foreground">
                 <span className="capitalize">{isMaster ? 'Мастер' : isClient ? 'Клиент' : 'Администратор'}</span>
@@ -105,20 +108,6 @@ function ProfileContent() {
 
             </div>
             <div className="flex items-center gap-2">
-              {/* Я мастер — показываем и гостям, и клиентам */}
-              {isClient && !isMaster && (
-                <button onClick={() => {
-                  if (profile.isGuest) { router.push('/auth?as=master'); return; }
-                  setShowMasterConfirm(true);
-                }} className="flex items-center gap-1.5 rounded-full border border-gold/60 bg-gold/10 px-4 py-2 text-sm font-medium text-gold hover:bg-gold/20 transition-colors" title="Стать мастером">
-                  <Sparkles className="h-4 w-4" /> Я мастер
-                </button>
-              )}
-              {isMaster && (
-                <Link href={`/masters/${profile.id}`} target="_blank" className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2 text-sm font-medium hover:bg-surface transition-colors" title="Публичный профиль">
-                  <Eye className="h-4 w-4" />
-                </Link>
-              )}
               {!profile.isGuest && (
                 <>
                   <button onClick={() => setEditOpen(true)} className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2 text-sm font-medium hover:bg-surface transition-colors">
@@ -236,6 +225,33 @@ function ProfileContent() {
           {tab === 'uploads' && <UploadsTab />}
           {tab === 'reviews' && <ReviewsTab />}
         </div>
+
+        {/* Намеренно незаметные ссылки — для тех, кто ищет.
+            При соотношении 10 000:1 клиент их не заметит, мастер/владелец аккаунта — найдёт. */}
+        {(isGuestUser || (isClient && !isMaster)) && (
+          <div className="mt-10 pt-6 border-t border-border/30 text-center space-y-2">
+            {isGuestUser && (
+              <div>
+                <Link href="/auth?mode=login" className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                  Войти в существующий аккаунт
+                </Link>
+              </div>
+            )}
+            {isClient && !isMaster && (
+              <div>
+                <button
+                  onClick={() => {
+                    if (profile.isGuest) { router.push('/auth?as=master'); return; }
+                    setShowMasterConfirm(true);
+                  }}
+                  className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                >
+                  Стать мастером на платформе
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Master confirmation modal */}
@@ -296,10 +312,15 @@ function MasterDesignsTab({ userId }: { userId: string }) {
   if (!designList.length) return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-muted/30">
-        <Grid3X3 className="h-7 w-7 text-muted-foreground/40" />
+        <Sparkles className="h-7 w-7 text-muted-foreground/40" />
       </div>
-      <p className="text-sm font-medium text-muted-foreground">Нет созданных дизайнов</p>
-      <Link href="/create" className="mt-3 rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">Создать дизайн</Link>
+      <p className="text-sm font-medium text-muted-foreground">Пока нет подходящих дизайнов</p>
+      <p className="text-xs text-muted-foreground/60 mt-1 max-w-xs">
+        В ленте нажимайте <Sparkles className="h-3 w-3 inline text-primary" /> <span className="font-medium text-foreground/70">Я так могу</span> на понравившихся дизайнах — они появятся здесь, и клиенты смогут записаться
+      </p>
+      <Link href="/explore" className="mt-4 rounded-full bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
+        Перейти в ленту
+      </Link>
     </div>
   );
   return <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">{designList.map((d: Design, i: number) => <DesignCard key={d.id} design={d} delay={Math.min(i * 30, 300)} isLiked={likedIds.has(d.id)} />)}</div>;

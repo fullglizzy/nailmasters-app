@@ -17,6 +17,7 @@ export interface MasterCardData {
   reviewsCount?: number;
   specialties?: string[] | null;
   startingPrice?: string | null;
+  minDesignPrice?: number | null;
   experience?: string | null;
   workFormat?: string[] | null;
   sterilization?: boolean;
@@ -145,11 +146,11 @@ export function MasterCard({ master, delay, clientLat, clientLon }: MasterCardPr
 
       {/* ── Price CTA ── */}
       <div className="mt-auto pt-4">
-        {master.startingPrice ? (
+        {(master.startingPrice || master.minDesignPrice) ? (
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Стартовая цена</span>
+            <span className="text-xs text-muted-foreground">{master.startingPrice ? 'Стартовая цена' : 'Дизайны от'}</span>
             <span className="rounded-full bg-primary/[0.06] px-3 py-1 text-sm font-bold text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
-              от {parseInt(master.startingPrice).toLocaleString('ru-RU')} ₽
+              от ${(master.startingPrice ? parseInt(master.startingPrice) : master.minDesignPrice!).toLocaleString('en-US')}
             </span>
           </div>
         ) : (

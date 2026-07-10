@@ -108,7 +108,7 @@ export default function AdminPage() {
                 { label: 'Заказы', value: stats.totalOrders, icon: ShoppingBag, color: 'text-purple-600 bg-purple-50 dark:bg-purple-950' },
                 { label: 'Активные', value: stats.activeOrders, icon: Clock, color: 'text-green-600 bg-green-50 dark:bg-green-950' },
                 { label: 'Загрузки', value: stats.totalUploads, icon: TrendingUp, color: 'text-orange-600 bg-orange-50 dark:bg-orange-950' },
-                { label: 'Выручка', value: `${(stats.revenue || 0).toLocaleString()} ₽`, icon: BarChart3, color: 'text-cyan-600 bg-cyan-50 dark:bg-cyan-950' },
+                { label: 'Выручка', value: `$${(stats.revenue || 0).toLocaleString()}`, icon: BarChart3, color: 'text-cyan-600 bg-cyan-50 dark:bg-cyan-950' },
               ].map(s => (
                 <div key={s.label} className="rounded-xl border bg-card p-4">
                   <div className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${s.color} mb-2`}><s.icon className="h-4 w-4" /></div>
@@ -197,7 +197,7 @@ export default function AdminPage() {
                     <tr key={o.id} className="border-t cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setSelectedOrder(o)}>
                       <td className="p-3 font-mono text-xs">{o.id.slice(0, 8)}...</td>
                       <td className="p-3"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${o.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : o.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-muted text-muted-foreground'}`}>{o.status}</span></td>
-                      <td className="p-3 font-medium">{parseInt(String(o.price || '0')).toLocaleString()} ₽</td>
+                      <td className="p-3 font-medium">${parseInt(String(o.price || '0')).toLocaleString()}</td>
                       <td className="p-3 text-muted-foreground">{new Date(o.requestedDateTime).toLocaleDateString('ru')}</td>
                     </tr>
                   ))}

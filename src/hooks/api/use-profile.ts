@@ -27,7 +27,7 @@ export const notificationKeys = {
 export function useProfile() {
   const { token } = useAuthState();
   return useQuery({
-    queryKey: profileKeys.all,
+    queryKey: [...profileKeys.all, token],
     queryFn: () => apiGet<UserProfile>('/api/auth/profile'),
     enabled: !!token,
   });
@@ -40,7 +40,7 @@ export function useProfile() {
 export function useNotifications() {
   const { token } = useAuthState();
   return useQuery({
-    queryKey: notificationKeys.all,
+    queryKey: [...notificationKeys.all, token],
     queryFn: () => apiGet<Notification[]>('/api/notifications'),
     enabled: !!token,
   });

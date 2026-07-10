@@ -42,8 +42,14 @@ export function withAuth(handler: RouteHandler): RouteHandler {
         throw new AuthError('Пользователь не найден или заблокирован');
       }
 
-      // Добавляем пользователя в запрос
-      (req as AuthenticatedRequest).user = payload;
+      // Берём роль и isGuest из БД, а не из токена — они могли измениться
+      // (например, клиент → мастер, гость → клиент)
+      const dbUser = users[0];
+      (req as AuthenticatedRequest).user = {
+        ...payload,
+        role: dbUser.role as UserRole,
+        isGuest: dbUser.isGuest,
+      };
       return handler(req, context);
     } catch (error) {
       if (error instanceof AuthError) {
@@ -78,7 +84,19 @@ export function withOptionalAuth(handler: RouteHandler): RouteHandler {
     if (token) {
       const payload = await verifyAccessToken(token);
       if (payload) {
-        (req as AuthenticatedRequest).user = payload;
+        // Сверяем роль и isGuest с БД — они могли измениться с момента выпуска токена
+        const users = await db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, payload.userId))
+          .limit(1);
+        if (users.length && !users[0].blocked) {
+          (req as AuthenticatedRequest).user = {
+            ...payload,
+            role: users[0].role as UserRole,
+            isGuest: users[0].isGuest,
+          };
+        }
       }
     }
     return handler(req, context);

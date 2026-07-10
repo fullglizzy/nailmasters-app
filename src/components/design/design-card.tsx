@@ -30,7 +30,7 @@ export function DesignCard({ design, isLiked: isLikedProp, rank, href, delay }: 
   const hasVideo = design.videoUrl && design.videoUrl.trim() !== '';
   const hasImages = design.images && design.images.length > 0;
   const link = href || `/explore/${design.id}`;
-  const price = design._masterPrice ? parseInt(String(design._masterPrice)).toLocaleString('ru-RU') : null;
+  const price = design._masterPrice ? parseInt(String(design._masterPrice)).toLocaleString('en-US') : null;
   const duration = design._masterDuration ? parseInt(String(design._masterDuration)) : null;
 
   return (
@@ -44,7 +44,7 @@ export function DesignCard({ design, isLiked: isLikedProp, rank, href, delay }: 
         <div className="absolute top-2 right-2 z-10 flex gap-1">
           {price && (
             <span className="rounded-full bg-background/85 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-primary shadow-sm border border-border/40">
-              {price} ₽
+              ${price}
             </span>
           )}
           {duration && (

@@ -4,60 +4,71 @@
 
 @layer base {
   :root {
-    /* ── Lacquer & Precision palette ── */
-    --background: 33 23% 94%;       /* #F5F1EC — warm with lavender undertone */
-    --foreground: 260 8% 13%;       /* #1F1B26 — deep violet-black ink */
-    --card: 33 18% 90%;             /* #EDE7E0 — raised surface */
-    --card-foreground: 260 8% 13%;
-    --popover: 33 23% 94%;
-    --popover-foreground: 260 8% 13%;
-    --primary: 348 62% 50%;         /* #CC3A54 — rose lacquer */
+    /* ── Polished Glass palette ── */
+    --background: 255 20% 97%;       /* #F7F5F9 — salon wall in morning light */
+    --foreground: 260 10% 11%;       /* #1A1721 — polish bottle glass at rest */
+    --card: 0 0% 100%;               /* #FFFFFF — glossy shelf white */
+    --card-foreground: 260 10% 11%;
+    --popover: 255 20% 97%;
+    --popover-foreground: 260 10% 11%;
+    --primary: 348 65% 52%;          /* #D43D62 — vivid rose lacquer */
     --primary-foreground: 0 0% 98%;
-    --secondary: 150 22% 49%;       /* #609A7D — salon sage */
+    --secondary: 158 26% 46%;        /* #5A9078 — deepened salon sage */
     --secondary-foreground: 0 0% 98%;
-    --muted: 260 5% 51%;            /* #7A7485 */
-    --muted-foreground: 260 5% 62%;
-    --accent: 33 20% 93%;           /* warm accent bg */
-    --accent-foreground: 348 62% 45%;
-    --destructive: 0 72% 49%;
+    --muted: 258 8% 58%;             /* #8E8A99 — lavender-grey */
+    --muted-foreground: 258 8% 45%;
+    --accent: 260 30% 96%;           /* amethyst whisper bg */
+    --accent-foreground: 265 45% 48%;
+    --destructive: 0 68% 47%;
     --destructive-foreground: 0 0% 98%;
-    --border: 34 15% 81%;           /* #D8D0C5 */
-    --input: 34 15% 81%;
-    --ring: 348 62% 50%;
-    --radius: 0.5rem;
+    --border: 258 12% 88%;           /* #DDDAE3 — cool grey-violet */
+    --input: 258 12% 88%;
+    --ring: 348 65% 52%;
+    --radius: 0.625rem;
 
-    /* Gold for highlights, stars, premium */
-    --gold: 43 48% 53%;             /* #C49B4C */
+    /* Gold — premium, stars, rankings */
+    --gold: 43 48% 53%;              /* #C49B4C */
     --gold-foreground: 0 0% 98%;
+
+    /* Amethyst — iridescent topcoat accent. Use sparingly. */
+    --amethyst: 265 45% 55%;         /* #7C5CBF */
+    --amethyst-foreground: 0 0% 98%;
 
     /* Typography */
     --font-sans: 'Manrope', system-ui, -apple-system, sans-serif;
     --font-display: 'Yeseva One', 'Times New Roman', serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+    /* Glass card shadow */
+    --glass-shadow: 0 1px 3px rgba(26, 23, 33, 0.04), 0 1px 2px rgba(26, 23, 33, 0.03);
   }
 
   .dark {
-    --background: 262 17% 8%;       /* #13101A — lacquer bottle black */
-    --foreground: 268 18% 93%;      /* #ECE6F2 */
-    --card: 262 15% 12%;            /* #1C1825 */
-    --card-foreground: 268 18% 93%;
-    --popover: 262 15% 10%;
-    --popover-foreground: 268 18% 93%;
-    --primary: 350 72% 63%;         /* #E8566F — rose glow */
+    --background: 260 20% 6%;        /* #0E0C13 — lacquer bottle black */
+    --foreground: 265 18% 93%;       /* #EDE9F3 */
+    --card: 260 15% 10%;             /* #16141C */
+    --card-foreground: 265 18% 93%;
+    --popover: 260 15% 10%;
+    --popover-foreground: 265 18% 93%;
+    --primary: 348 72% 60%;          /* #E85D78 — rose glow */
     --primary-foreground: 0 0% 98%;
-    --secondary: 150 36% 58%;       /* #72B894 — sage glow */
+    --secondary: 158 36% 54%;        /* #6DB48B — sage glow */
     --secondary-foreground: 0 0% 10%;
     --muted: 262 10% 35%;
-    --muted-foreground: 262 12% 68%;
-    --accent: 348 62% 15%;
-    --accent-foreground: 350 72% 70%;
-    --destructive: 0 62% 40%;
+    --muted-foreground: 262 12% 65%;
+    --accent: 265 35% 16%;
+    --accent-foreground: 265 45% 68%;
+    --destructive: 0 58% 40%;
     --destructive-foreground: 0 0% 98%;
-    --border: 262 12% 22%;          /* #2C2638 */
-    --input: 262 12% 22%;
-    --ring: 350 72% 63%;
-    --gold: 43 55% 60%;             /* #D4AE5D */
+    --border: 262 12% 20%;           /* #2C2836 */
+    --input: 262 12% 20%;
+    --ring: 348 72% 60%;
+    --gold: 43 55% 60%;              /* #D4AE5D */
     --gold-foreground: 0 0% 10%;
+    --amethyst: 265 50% 62%;         /* #9A7FD4 */
+    --amethyst-foreground: 0 0% 10%;
+
+    --glass-shadow: 0 1px 3px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1);
   }
 }
 
@@ -68,6 +79,7 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    letter-spacing: -0.01em;
   }
   html {
     scroll-behavior: smooth;
@@ -99,15 +111,14 @@
     text-wrap: balance;
   }
 
-  /* Crosshatch texture — nail file motif */
-  .texture-file {
-    background-image:
-      linear-gradient(45deg, transparent 49.5%, hsl(var(--border) / 0.3) 49.5%, hsl(var(--border) / 0.3) 50.5%, transparent 50.5%),
-      linear-gradient(-45deg, transparent 49.5%, hsl(var(--border) / 0.3) 49.5%, hsl(var(--border) / 0.3) 50.5%, transparent 50.5%);
-    background-size: 8px 8px;
+  /* ── Glass card — elevated surface with subtle depth ── */
+  .glass-card {
+    background: hsl(var(--card));
+    box-shadow: var(--glass-shadow);
+    border: 1px solid hsl(var(--border) / 0.5);
   }
 
-  /* Glossy highlight — polished nail reflection on hover */
+  /* ── Gloss sweep — single polished reflection on hover ── */
   .gloss-highlight {
     position: relative;
     overflow: hidden;
@@ -117,21 +128,84 @@
     position: absolute;
     top: 0;
     left: -100%;
-    width: 60%;
+    width: 50%;
     height: 100%;
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(255, 255, 255, 0.08) 40%,
-      rgba(255, 255, 255, 0.15) 50%,
-      rgba(255, 255, 255, 0.08) 60%,
+      rgba(255, 255, 255, 0.06) 45%,
+      rgba(255, 255, 255, 0.1) 50%,
+      rgba(255, 255, 255, 0.06) 55%,
       transparent 100%
     );
-    transition: left 0.6s ease;
+    transition: left 0.7s cubic-bezier(0.4, 0, 0.2, 1);
     pointer-events: none;
+    z-index: 5;
   }
   .gloss-highlight:hover::after {
     left: 120%;
+  }
+
+  /* ── Polish Swatch — glassy color circle ── */
+  .polish-swatch {
+    position: relative;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+    /* Specular highlight — the glass reflection */
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.4),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.08),
+      0 0 0 1px rgba(0, 0, 0, 0.06),
+      0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+  .polish-swatch:hover {
+    transform: translateY(-2px) scale(1.08);
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.45),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.06),
+      0 0 0 2px hsl(var(--primary) / 0.3),
+      0 4px 12px rgba(0, 0, 0, 0.12);
+  }
+  .polish-swatch:active {
+    transform: scale(0.95);
+    transition: transform 0.1s ease;
+  }
+  .polish-swatch[aria-pressed="true"] {
+    transform: scale(1.12);
+    box-shadow:
+      inset 0 2px 3px rgba(255, 255, 255, 0.5),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.04),
+      0 0 0 2.5px hsl(var(--primary)),
+      0 0 0 5px hsl(var(--primary) / 0.15),
+      0 4px 16px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Ripple pulse when swatch is selected */
+  .polish-swatch[aria-pressed="true"]::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    background: transparent;
+    border: 1.5px solid hsl(var(--primary) / 0.25);
+    animation: swatch-ripple 0.6s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  /* ── Section eyebrow — for real structural labels, not decoration ── */
+  .section-eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* ── Price number treatment ── */
+  .price-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: "tnum";
+    letter-spacing: -0.02em;
   }
 }
 
@@ -152,7 +226,6 @@
 }
 
 @layer base {
-  /* Sonner wrapper background fix */
   [data-sonner-toaster] {
     --mobile-offset: 16px;
   }
@@ -160,13 +233,11 @@
 
 /* ── Accessibility ── */
 
-/* Visible focus ring for keyboard navigation */
 @layer base {
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-primary rounded-sm;
   }
 
-  /* Skip to content — hidden until focused */
   .skip-to-content {
     position: absolute;
     top: -100%;
@@ -184,7 +255,6 @@
     top: 0;
   }
 
-  /* Focus ring override for interactive elements in a group */
   .group:focus-visible {
     outline: none;
   }
@@ -205,6 +275,12 @@
   }
   .gloss-highlight::after {
     display: none;
+  }
+  .polish-swatch:hover {
+    transform: none;
+  }
+  .polish-swatch[aria-pressed="true"]::before {
+    animation: none;
   }
 }
 
@@ -233,4 +309,16 @@
 @keyframes modal-out {
   from { opacity: 1; transform: translateY(0) scale(1); }
   to   { opacity: 0; transform: translateY(16px) scale(0.97); }
+}
+
+/* ── Polish swatch animations ── */
+@keyframes swatch-ripple {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
 }

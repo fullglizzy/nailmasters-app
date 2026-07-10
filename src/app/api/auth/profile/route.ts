@@ -113,15 +113,14 @@ export const PUT = withAuth(async (req: NextRequest) => {
           await db.update(schema.masterProfiles).set(profileUpdates).where(eq(schema.masterProfiles.userId, user.userId));
         }
       } else {
-        // Конвертация клиента в мастера — берём данные из существующего профиля
+        // Конвертация клиента в мастера — берём данные из существующего профиля.
+        // Клиентский профиль НЕ удаляем: на него завязаны лайки (clientLikedDesigns)
+        // и загрузки (nailDesigns.uploadedByClientId) через FK с onDelete cascade/set null.
+        // Профиль остаётся в БД, но не запрашивается — роль в users уже 'nailmaster'.
         const clientProfile = await db.select().from(schema.clientProfiles).where(eq(schema.clientProfiles.userId, user.userId)).limit(1);
         const carryName = fullName || clientProfile[0]?.fullName || user.username || 'Мастер';
         const carryPhone = phone || clientProfile[0]?.phone || user.phone || '';
-        await db.insert(schema.masterProfiles).values({ userId: user.userId, fullName: carryName, phone: carryPhone });
-        // Удаляем клиентский профиль
-        if (clientProfile.length > 0) {
-          await db.delete(schema.clientProfiles).where(eq(schema.clientProfiles.userId, user.userId));
-        }
+        await db.insert(schema.masterProfiles).values({ userId: user.userId, fullName: carryName, phone: carryPhone, isModerated: true });
       }
     } else if (effectiveRole === 'client') {
       const existingProfile = await db.select().from(schema.clientProfiles).where(eq(schema.clientProfiles.userId, user.userId)).limit(1);

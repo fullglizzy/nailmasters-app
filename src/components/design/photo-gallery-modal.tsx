@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -13,12 +13,15 @@ interface PhotoGalleryModalProps {
 export function PhotoGalleryModal({ images, initialIndex = 0, onClose }: PhotoGalleryModalProps) {
   const [current, setCurrent] = useState(initialIndex);
 
-  // Keyboard navigation
+  const goPrev = useCallback(() => setCurrent((p) => Math.max(0, p - 1)), []);
+  const goNext = useCallback(() => setCurrent((p) => Math.min(images.length - 1, p + 1)), [images.length]);
+
+  // Keyboard navigation — stable callback, no re-subscription on every render
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowLeft') setCurrent((p: number) => Math.max(0, p - 1));
-      if (e.key === 'ArrowRight') setCurrent((p: number) => Math.min(images.length - 1, p + 1));
+      if (e.key === 'ArrowLeft') setCurrent((p) => Math.max(0, p - 1));
+      if (e.key === 'ArrowRight') setCurrent((p) => Math.min(images.length - 1, p + 1));
     };
     document.addEventListener('keydown', handleKey);
     document.body.style.overflow = 'hidden';
@@ -35,7 +38,7 @@ export function PhotoGalleryModal({ images, initialIndex = 0, onClose }: PhotoGa
       </button>
 
       <button
-        onClick={(e) => { e.stopPropagation(); setCurrent((p: number) => Math.max(0, p - 1)); }}
+        onClick={(e) => { e.stopPropagation(); goPrev(); }}
         disabled={current === 0}
         className="absolute left-4 z-10 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 disabled:opacity-30"
       >
@@ -55,7 +58,7 @@ export function PhotoGalleryModal({ images, initialIndex = 0, onClose }: PhotoGa
       </div>
 
       <button
-        onClick={(e) => { e.stopPropagation(); setCurrent((p: number) => Math.min(images.length - 1, p + 1)); }}
+        onClick={(e) => { e.stopPropagation(); goNext(); }}
         disabled={current === images.length - 1}
         className="absolute right-4 z-10 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 disabled:opacity-30"
       >

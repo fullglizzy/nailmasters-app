@@ -71,7 +71,7 @@ export function usePopularDesigns() {
 export function useLikedDesigns() {
   const { token } = useAuthState();
   return useQuery({
-    queryKey: designKeys.liked(),
+    queryKey: [...designKeys.liked(), token],
     queryFn: () => apiGet<Design[]>('/api/designs/liked'),
     enabled: !!token,
   });

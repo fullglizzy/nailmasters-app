@@ -32,7 +32,7 @@ export function OrderDetailModal({ order, open, onClose }: Props) {
             <span className="rounded-full bg-gold/10 text-gold px-3 py-1 text-sm font-semibold">
               {STATUS_LABELS[order.status] || order.status}
             </span>
-            <span className="text-xl font-bold text-primary">{parseInt(String(order.price || '0')).toLocaleString()} ₽</span>
+            <span className="text-xl font-bold text-primary">${parseInt(String(order.price || '0')).toLocaleString()}</span>
           </div>
 
           {/* Time */}
