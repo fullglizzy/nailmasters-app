@@ -18,6 +18,6 @@ export { masterServices, masterServiceDesigns } from './services';
 export { orders, orderDesignSnapshots } from './orders';
 export { schedules } from './schedules';
 export { reviews, masterRatings } from './reviews';
-export { comments } from './comments';
+export { comments, commentLikes } from './comments';
 export { notifications } from './notifications';
 export { messages } from './messages';

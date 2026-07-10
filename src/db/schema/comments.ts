@@ -1,6 +1,6 @@
 import { pgTable, uuid, text, integer, timestamp } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { users } from './users';
+import { users, clientProfiles } from './users';
 import { nailDesigns } from './designs';
 
 // ============================================================
@@ -15,6 +15,14 @@ export const comments = pgTable('comments', {
   designId: uuid('design_id').notNull().references(() => nailDesigns.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+// ============================================================
+// comment_likes — кто лайкнул какой комментарий
+// ============================================================
+export const commentLikes = pgTable('comment_likes', {
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  commentId: uuid('comment_id').notNull().references(() => comments.id, { onDelete: 'cascade' }),
 });
 
 export const commentsRelations = relations(comments, ({ one, many }) => ({
@@ -32,4 +40,10 @@ export const commentsRelations = relations(comments, ({ one, many }) => ({
     relationName: 'comment_replies',
   }),
   replies: many(comments, { relationName: 'comment_replies' }),
+  likes: many(commentLikes),
+}));
+
+export const commentLikesRelations = relations(commentLikes, ({ one }) => ({
+  user: one(users, { fields: [commentLikes.userId], references: [users.id] }),
+  comment: one(comments, { fields: [commentLikes.commentId], references: [comments.id] }),
 }));

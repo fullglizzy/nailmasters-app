@@ -94,8 +94,11 @@ export function useMasterReviews(masterId: string | undefined) {
 }
 
 export function useMyReviews() {
+  const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+  const clientId = user.id || '';
   return useQuery({
     queryKey: masterKeys.myReviews(),
-    queryFn: () => apiGet<unknown[]>('/api/master-rating'),
+    queryFn: () => apiGet<unknown[]>('/api/master-rating', { clientId }),
+    enabled: !!clientId,
   });
 }

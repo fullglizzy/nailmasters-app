@@ -9,56 +9,60 @@ interface AuthState {
   role: string;
   isGuest: boolean;
   refresh: () => void;
-  isLoading: boolean; // true while guest session is being established
+  isLoading: boolean;
 }
 
 // ── Context ──────────────────────────────────────────────
 
 const AuthContext = createContext<AuthState>({
-  token: null,
-  role: '',
-  isGuest: false,
-  refresh: () => {},
-  isLoading: true,
+  token: null, role: '', isGuest: false, refresh: () => {}, isLoading: true,
 });
 
 export const useAuthState = () => useContext(AuthContext);
 
-// ── Helpers ──────────────────────────────────────────────
+// ── Storage helpers ──────────────────────────────────────
 
-const STORAGE_KEYS = {
+const KEYS = {
   token: 'token',
   refreshToken: 'refreshToken',
   user: 'user',
-  guestCreated: 'guest_created', // prevents duplicate guest accounts
+  guestCreated: 'guest_created',
   guestLikes: 'guest_likes',
 } as const;
 
-function readStoredAuth(): { token: string | null; user: Record<string, unknown> } {
-  if (typeof window === 'undefined') return { token: null, user: {} };
-  return {
-    token: localStorage.getItem(STORAGE_KEYS.token),
-    user: JSON.parse(localStorage.getItem(STORAGE_KEYS.user) || '{}'),
-  };
+function clearAllAuth() {
+  Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
 }
 
-/** Persist auth data from API response to localStorage */
-function persistAuth(data: { token: string; refreshToken: string; user: Record<string, unknown> }) {
-  localStorage.setItem(STORAGE_KEYS.token, data.token);
-  localStorage.setItem(STORAGE_KEYS.refreshToken, data.refreshToken);
-  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(data.user));
-  localStorage.setItem(STORAGE_KEYS.guestCreated, '1');
-}
-
-/** Clear auth data on explicit logout — keeps guest_created to prevent auto re-creation */
+/** Public logout — clears everything, hard reloads */
 export function clearAuth() {
-  localStorage.removeItem(STORAGE_KEYS.token);
-  localStorage.removeItem(STORAGE_KEYS.refreshToken);
-  localStorage.removeItem(STORAGE_KEYS.user);
-  localStorage.removeItem(STORAGE_KEYS.guestLikes);
-  // NOTE: guest_created is intentionally preserved so the guest
-  // provider does NOT auto-create a new guest after logout
+  clearAllAuth();
+  window.location.href = '/';
 }
+
+/** Persist auth from API response */
+function persist(data: { token: string; refreshToken: string; user: Record<string, unknown> }) {
+  localStorage.setItem(KEYS.token, data.token);
+  localStorage.setItem(KEYS.refreshToken, data.refreshToken);
+  localStorage.setItem(KEYS.user, JSON.stringify(data.user));
+  localStorage.setItem(KEYS.guestCreated, '1');
+}
+
+/** Quick check if stored token is still valid */
+async function isTokenValid(token: string): Promise<boolean> {
+  try {
+    const res = await fetch('/api/auth/profile', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ── State machine ────────────────────────────────────────
+
+type Phase = 'checking' | 'guest_needed' | 'ready';
 
 // ── Provider ─────────────────────────────────────────────
 
@@ -66,25 +70,73 @@ export function GuestSessionProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [role, setRole] = useState('');
   const [isGuest, setIsGuest] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const guestRequestedRef = useRef(false);
-  const mountedRef = useRef(true);
-
-  // ── Read auth from storage ──────────────────────────
+  const [phase, setPhase] = useState<Phase>('checking');
+  const startedRef = useRef(false);
 
   const refresh = useCallback(() => {
-    const { token: t, user } = readStoredAuth();
+    const t = localStorage.getItem(KEYS.token);
+    const user = JSON.parse(localStorage.getItem(KEYS.user) || '{}');
     setToken(t);
     setRole((user.role as string) || '');
     setIsGuest((user.isGuest as boolean) || false);
   }, []);
 
-  // Initial load
+  // ── Bootstrap: sequential, no races ────────────────────
   useEffect(() => {
-    mountedRef.current = true;
-    refresh();
-    return () => { mountedRef.current = false; };
-  }, [refresh]);
+    if (startedRef.current) return;
+    startedRef.current = true;
+
+    (async () => {
+      // 1. Check for existing token
+      const storedToken = localStorage.getItem(KEYS.token);
+
+      if (storedToken) {
+        // 2a. Token exists — validate it
+        const valid = await isTokenValid(storedToken);
+        if (valid) {
+          // Token is good — use it
+          const user = JSON.parse(localStorage.getItem(KEYS.user) || '{}');
+          setToken(storedToken);
+          setRole((user.role as string) || '');
+          setIsGuest((user.isGuest as boolean) || false);
+          setPhase('ready');
+          return;
+        }
+        // Token expired — clear everything, fall through to guest creation
+        clearAllAuth();
+        setToken(null);
+        setRole('');
+        setIsGuest(false);
+      }
+
+      // 2b. No valid token — check if guest was already created
+      if (localStorage.getItem(KEYS.guestCreated)) {
+        setPhase('ready');
+        return;
+      }
+
+      // 3. Need a guest
+      setPhase('guest_needed');
+
+      try {
+        const res = await fetch('/api/auth/register-guest', { method: 'POST' });
+        const json = await res.json();
+        if (json.success && json.data) {
+          persist(json.data);
+          setToken(json.data.token);
+          setRole(json.data.user.role || 'client');
+          setIsGuest(true);
+          window.dispatchEvent(new Event('auth-change'));
+        } else {
+          localStorage.removeItem(KEYS.guestCreated);
+        }
+      } catch {
+        localStorage.removeItem(KEYS.guestCreated);
+      }
+
+      setPhase('ready');
+    })();
+  }, []); // runs exactly once on mount
 
   // Listen for cross-tab / in-app auth changes
   useEffect(() => {
@@ -97,62 +149,9 @@ export function GuestSessionProvider({ children }: { children: ReactNode }) {
     };
   }, [refresh]);
 
-  // ── Guest session creation ──────────────────────────
+  // ── Render ───────────────────────────────────────────
 
-  useEffect(() => {
-    // Already authenticated — nothing to do
-    if (token) {
-      setIsLoading(false);
-      return;
-    }
-
-    // Guest already created in a previous session — skip
-    if (localStorage.getItem(STORAGE_KEYS.guestCreated)) {
-      setIsLoading(false);
-      return;
-    }
-
-    // Already requested in this mount cycle — prevent double-fetch
-    if (guestRequestedRef.current) {
-      setIsLoading(false);
-      return;
-    }
-    guestRequestedRef.current = true;
-
-    let cancelled = false;
-
-    fetch('/api/auth/register-guest', { method: 'POST' })
-      .then((r) => r.json())
-      .then((json) => {
-        if (cancelled || !mountedRef.current) return;
-
-        if (json.success && json.data) {
-          persistAuth(json.data);
-          // Don't call refresh() — read directly to avoid extra re-render
-          setToken(json.data.token);
-          setRole(json.data.user.role || 'client');
-          setIsGuest(true);
-          window.dispatchEvent(new Event('auth-change'));
-        } else {
-          // API returned non-success — remove stale flag so we retry next visit
-          localStorage.removeItem(STORAGE_KEYS.guestCreated);
-        }
-        setIsLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled && mountedRef.current) {
-          // Network error — remove stale flag so we retry next visit
-          localStorage.removeItem(STORAGE_KEYS.guestCreated);
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
-
-  // ── Context value ───────────────────────────────────
+  const isLoading = phase !== 'ready';
 
   return (
     <AuthContext.Provider value={{ token, role, isGuest, refresh, isLoading }}>

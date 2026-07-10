@@ -52,7 +52,9 @@ export function MasterCard({ master, delay, clientLat, clientLon }: MasterCardPr
         {/* Avatar with accent ring */}
         <div className="relative shrink-0">
           {master.avatarUrl ? (
-            <Image src={master.avatarUrl} alt="" width={52} height={52} className="rounded-full object-cover ring-2 ring-primary/[0.08] group-hover:ring-primary/20 transition-all duration-300 shrink-0" />
+            <div className="relative h-[52px] w-[52px] rounded-full overflow-hidden ring-2 ring-primary/[0.08] group-hover:ring-primary/20 transition-all duration-300 shrink-0">
+              <Image src={master.avatarUrl} alt="" fill sizes="52px" className="object-cover" />
+            </div>
           ) : (
             <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-primary/[0.06] ring-2 ring-primary/[0.08] group-hover:ring-primary/20 transition-all duration-300 shrink-0">
               <span className="font-display text-xl text-primary">{master.fullName.charAt(0).toUpperCase()}</span>

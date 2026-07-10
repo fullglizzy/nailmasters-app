@@ -26,6 +26,7 @@ dist/
 # Uploads (dev)
 public/uploads/avatars/*
 public/uploads/designs/*
+public/uploads/messages/*
 public/uploads/videos/*
 public/uploads/sterilization/*
 !public/uploads/**/.gitkeep

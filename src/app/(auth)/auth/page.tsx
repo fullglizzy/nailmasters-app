@@ -177,13 +177,7 @@ export default function AuthPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-1.5 text-2xl font-bold tracking-tight">
-            <span className="font-display text-primary">Nail</span>
-            <span className="font-display">Masters</span>
-          </Link>
-        </div>
+        
 
         {error && (
           <div className="mb-4 rounded-xl bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20 flex items-start gap-2">
@@ -197,8 +191,8 @@ export default function AuthPage() {
             <>
               <div className="text-center mb-6">
                 <Smartphone className="h-10 w-10 mx-auto mb-3 text-primary" />
-                <h2 className="text-xl font-bold">Вход или регистрация</h2>
-                <p className="text-sm text-muted-foreground mt-1">Введите номер телефона</p>
+                <h2 className="text-xl font-bold">Введите номер телефона</h2>
+                
               </div>
 
               <div className="space-y-4">

@@ -21,6 +21,18 @@ export const GET = withOptionalAuth(async (req: NextRequest, { params }: { param
   const comments = await db.select().from(schema.comments)
     .where(eq(schema.comments.designId, id))
     .orderBy(desc(schema.comments.createdAt));
+
+  // If authenticated, enrich with isLiked
+  const user = (req as AuthenticatedRequest).user;
+  if (user) {
+    const likedRows = await db.select({ commentId: schema.commentLikes.commentId })
+      .from(schema.commentLikes)
+      .where(eq(schema.commentLikes.userId, user.userId));
+    const likedSet = new Set(likedRows.map((r) => r.commentId));
+    const enriched = comments.map((c) => ({ ...c, isLiked: likedSet.has(c.id) }));
+    return successResponse(enriched);
+  }
+
   return successResponse(comments);
 });
 

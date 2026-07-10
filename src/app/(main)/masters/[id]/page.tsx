@@ -132,7 +132,9 @@ export default function MasterProfilePage() {
             {/* Avatar */}
             <div className="relative shrink-0">
               {master.avatarUrl ? (
-                <Image src={master.avatarUrl} alt={master.fullName} width={88} height={88} className="rounded-full object-cover ring-2 ring-primary/[0.08]" />
+                <div className="relative h-[88px] w-[88px] rounded-full overflow-hidden ring-2 ring-primary/[0.08] shrink-0">
+                  <Image src={master.avatarUrl} alt={master.fullName} fill sizes="88px" className="object-cover" />
+                </div>
               ) : (
                 <div className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-primary/[0.06] ring-2 ring-primary/[0.08]">
                   <span className="font-display text-[40px] text-primary">{master.fullName.charAt(0).toUpperCase()}</span>
@@ -333,7 +335,7 @@ function MasterReviews({ masterId, onReviewClick, refreshKey }: { masterId: stri
           <div key={r.id} className="rounded-xl border border-border/40 bg-card p-4">
             <div className="flex items-center gap-2 mb-2">
               {r.clientAvatar ? (
-                <Image src={r.clientAvatar} alt="" width={32} height={32} className="rounded-full object-cover shrink-0" />
+                <div className="relative h-8 w-8 rounded-full overflow-hidden shrink-0"><Image src={r.clientAvatar} alt="" fill sizes="32px" className="object-cover" /></div>
               ) : (
                 <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-xs font-bold shrink-0">
                   {(r.clientName || '?').charAt(0)}

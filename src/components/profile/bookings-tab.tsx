@@ -142,7 +142,7 @@ export function BookingsTab() {
                         {isMaster && o._client && (
                           <>
                             {o._client.avatar ? (
-                              <Image src={o._client.avatar} alt="" width={24} height={24} className="rounded-full object-cover shrink-0" />
+                              <div className="relative h-6 w-6 rounded-full overflow-hidden shrink-0"><Image src={o._client.avatar} alt="" fill sizes="24px" className="object-cover" /></div>
                             ) : (
                               <div className="h-6 w-6 rounded-full bg-accent flex items-center justify-center text-[10px] font-bold shrink-0">{(o._client.name || 'К').charAt(0)}</div>
                             )}
@@ -152,7 +152,7 @@ export function BookingsTab() {
                         {!isMaster && o._master && (
                           <>
                             {o._master.avatar ? (
-                              <Image src={o._master.avatar} alt="" width={24} height={24} className="rounded-full object-cover shrink-0" />
+                              <div className="relative h-6 w-6 rounded-full overflow-hidden shrink-0"><Image src={o._master.avatar} alt="" fill sizes="24px" className="object-cover" /></div>
                             ) : (
                               <div className="h-6 w-6 rounded-full bg-accent flex items-center justify-center text-[10px] font-bold shrink-0">{(o._master.name || 'М').charAt(0)}</div>
                             )}

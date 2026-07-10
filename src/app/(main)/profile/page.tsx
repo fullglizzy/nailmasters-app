@@ -30,11 +30,7 @@ function ProfileContent() {
 
   const { data: profile, isLoading, refetch } = useProfile();
 
-  const handleLogout = () => {
-    clearAuth();
-    window.dispatchEvent(new Event('auth-change'));
-    router.push('/');
-  };
+  const handleLogout = () => clearAuth();
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
   if (!profile) return <div className="flex min-h-screen flex-col items-center justify-center"><h1 className="font-display text-2xl mb-2">Необходима авторизация</h1><Link href="/auth" className="text-primary hover:underline font-medium">Войти</Link></div>;
@@ -87,7 +83,9 @@ function ProfileContent() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
             <div className="relative shrink-0">
               {profile.avatarUrl ? (
-                <Image src={profile.avatarUrl} alt="" width={72} height={72} className="rounded-full object-cover ring-2 ring-primary/[0.08]" />
+                <div className="relative h-[72px] w-[72px] rounded-full overflow-hidden ring-2 ring-primary/[0.08]">
+                  <Image src={profile.avatarUrl} alt="" fill sizes="72px" className="object-cover" />
+                </div>
               ) : (
                 <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-primary/[0.06] ring-2 ring-primary/[0.08]">
                   <span className="font-display text-3xl text-primary">{(profile.fullName || profile.username).charAt(0).toUpperCase()}</span>

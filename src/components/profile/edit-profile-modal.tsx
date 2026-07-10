@@ -222,7 +222,7 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
             <div className="flex justify-center">
               <label className="relative cursor-pointer group">
                 <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary overflow-hidden border-2 border-border/40">
-                  {profile?.avatarUrl ? <Image src={profile.avatarUrl} alt="" width={80} height={80} className="h-full w-full object-cover" /> : (fullName || '?').charAt(0).toUpperCase()}
+                  {profile?.avatarUrl ? <Image src={profile.avatarUrl} alt="" fill sizes="80px" className="object-cover" /> : (fullName || '?').charAt(0).toUpperCase()}
                 </div>
                 <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <Camera className="h-5 w-5 text-white" />
