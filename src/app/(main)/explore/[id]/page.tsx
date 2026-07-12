@@ -240,7 +240,6 @@ export default function TikTokFeedPage() {
   const urlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasScrolledToStart = useRef(false);
   const rafRef = useRef(0);
-  const scrollAccumRef = useRef(0);
 
   const { role } = useAuthState();
 
@@ -301,7 +300,7 @@ export default function TikTokFeedPage() {
     if (idx >= 0) {
       hasScrolledToStart.current = true;
       const h = containerRef.current.clientHeight;
-      containerRef.current.scrollTo({ top: idx * h, behavior: 'instant' as ScrollBehavior });
+      containerRef.current.scrollTo({ top: idx * h, behavior: 'auto' as ScrollBehavior });
       setCurrentIndex(idx);
       currentIndexRef.current = idx;
     }
@@ -344,7 +343,8 @@ export default function TikTokFeedPage() {
   const scrollToIndex = useCallback((idx: number) => {
     const el = containerRef.current;
     if (!el) return;
-    el.scrollTo({ top: idx * el.clientHeight, behavior: 'smooth' });
+    // Instant jump — CSS scroll-snap animates with GPU compositing
+    el.scrollTo({ top: idx * el.clientHeight, behavior: 'auto' });
     updateIndex(idx);
   }, [updateIndex]);
 
@@ -362,50 +362,34 @@ export default function TikTokFeedPage() {
     else router.push('/');
   }, [router]);
 
-  /* ── One-card-at-a-time scroll (rAF-throttled) ──────── */
+  /* ── Desktop: one-card-at-a-time via wheel ──────────── */
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !designs.length) return;
 
-    let touchStartY = 0;
-    let scrolling = false;
-    const THRESHOLD = 50;
+    let cooldown = false;
+    const COOLDOWN_MS = 800; // duration of smooth scroll animation
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      if (scrolling) return;
-      scrollAccumRef.current += e.deltaY;
-      if (Math.abs(scrollAccumRef.current) >= THRESHOLD) {
-        scrolling = true;
-        const direction = scrollAccumRef.current > 0 ? 1 : -1;
-        scrollAccumRef.current = 0;
-        const target = currentIndexRef.current + direction;
-        if (target >= 0 && target < designs.length) scrollToIndex(target);
-        setTimeout(() => { scrolling = false; }, 600);
-      }
-    };
+      if (cooldown) return; // animation in progress, ignore
 
-    const onTouchStart = (e: TouchEvent) => { touchStartY = e.touches[0].clientY; };
-    const onTouchEnd = (e: TouchEvent) => {
-      if (scrolling) return;
-      const diff = touchStartY - e.changedTouches[0].clientY;
-      if (Math.abs(diff) < 40) return;
-      scrolling = true;
-      const direction = diff > 0 ? 1 : -1;
+      const direction = e.deltaY > 0 ? 1 : -1;
       const target = currentIndexRef.current + direction;
-      if (target >= 0 && target < designs.length) scrollToIndex(target);
-      setTimeout(() => { scrolling = false; }, 600);
+      if (target < 0 || target >= designs.length) return;
+
+      cooldown = true;
+      el.scrollTo({ top: target * el.clientHeight, behavior: 'auto' });
+      updateIndex(target);
+      setTimeout(() => { cooldown = false; }, COOLDOWN_MS);
     };
 
     el.addEventListener('wheel', onWheel, { passive: false });
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchend', onTouchEnd, { passive: true });
-    return () => {
-      el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchend', onTouchEnd);
-    };
-  }, [designs, scrollToIndex]);
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [designs, updateIndex]);
+
+  // Mobile touch: no JS intervention — CSS scroll-snap handles everything natively.
+  // GPU-composited, perfectly smooth on iOS and Android.
 
   /* ── Scroll tracking + URL sync (rAF-throttled) ─────── */
   useEffect(() => {
@@ -517,7 +501,7 @@ export default function TikTokFeedPage() {
       </button>
 
       {/* Feed */}
-      <div ref={containerRef} className="h-full overflow-y-auto snap-y snap-mandatory hide-scrollbar" style={{ scrollBehavior: 'smooth' }}>
+      <div ref={containerRef} className="h-full overflow-y-scroll snap-y snap-mandatory hide-scrollbar" style={{ scrollBehavior: 'smooth' }}>
         {designs.map((d) => {
           const design = castDesign(d);
           const allMedia = getAllMedia(design);
@@ -528,7 +512,7 @@ export default function TikTokFeedPage() {
           const minPrice = getMinPrice(design);
 
           return (
-            <div key={design.id} className="h-full snap-start flex items-center justify-center p-0 md:p-4">
+            <div key={design.id} className="h-full snap-start snap-always flex items-center justify-center p-0 md:p-4">
               <div className="relative overflow-hidden w-full h-full md:w-[55vh] md:h-[95vh] md:rounded-[20px] md:shadow-[0_20px_40px_rgba(0,0,0,0.3)] md:border md:border-border bg-background animate-[fadeIn_0.5s_ease-out]">
                 {/* Mobile back */}
                 <button onClick={goBack} className="absolute top-3 left-3 z-20 md:hidden rounded-full bg-black/30 p-1.5 text-white backdrop-blur-sm">
@@ -536,7 +520,36 @@ export default function TikTokFeedPage() {
                 </button>
 
                 {/* Media */}
-                <div className="relative w-full h-full">
+                <div
+                  className="relative w-full h-full"
+                  onTouchStart={(e) => {
+                    const t = e.touches[0];
+                    // Store touch origin on the element itself via dataset
+                    (e.currentTarget as HTMLElement).dataset.swipeX = String(t.clientX);
+                    (e.currentTarget as HTMLElement).dataset.swipeY = String(t.clientY);
+                  }}
+                  onTouchEnd={(e) => {
+                    const el = e.currentTarget as HTMLElement;
+                    const startX = parseFloat(el.dataset.swipeX || '0');
+                    const startY = parseFloat(el.dataset.swipeY || '0');
+                    const dx = startX - e.changedTouches[0].clientX;
+                    const dy = startY - e.changedTouches[0].clientY;
+                    // Only handle horizontal swipes (ignore vertical — those are for design switching)
+                    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30) {
+                      e.stopPropagation(); // Don't let it bubble to vertical scroll
+                      const all = getAllMedia(design);
+                      if (all.length <= 1) return;
+                      const cur = mediaIdx[design.id] || 0;
+                      const next = dx > 0 ? (cur + 1) % all.length : (cur - 1 + all.length) % all.length;
+                      setMediaIdx((p) => ({ ...p, [design.id]: next }));
+                      // Pause video if switching away from one
+                      const v = videoRefs.current.get(design.id);
+                      if (v) { v.pause(); setVideoPlaying((p) => ({ ...p, [design.id]: false })); }
+                    }
+                    delete el.dataset.swipeX;
+                    delete el.dataset.swipeY;
+                  }}
+                >
                   {isVideo ? (
                     <>
                       <video

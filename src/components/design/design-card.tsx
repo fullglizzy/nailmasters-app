@@ -89,15 +89,17 @@ export function DesignCard({ design, isLiked: isLikedProp, rank, href, delay }: 
         </div>
       )}
 
-      {/* Like overlay — always visible on mobile to avoid double-tap hover trap */}
-      <button
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleLike(); }}
-        disabled={isLoading}
-        className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200 hover:bg-black/60"
-      >
-        <Heart className={`h-3.5 w-3.5 ${isLiked ? 'fill-primary text-primary' : ''}`} />
-        <span>{likesCount}</span>
-      </button>
+      {/* Like overlay — hidden when price/duration badge is shown (master page) */}
+      {!(price || duration) && (
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleLike(); }}
+          disabled={isLoading}
+          className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200 hover:bg-black/60"
+        >
+          <Heart className={`h-3.5 w-3.5 ${isLiked ? 'fill-primary text-primary' : ''}`} />
+          <span>{likesCount}</span>
+        </button>
+      )}
 
       {/* Info */}
       <div className="p-3">

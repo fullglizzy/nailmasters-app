@@ -65,7 +65,7 @@ export const masterDesigns = pgTable('master_designs', {
 // client_liked_designs — junction table
 // ============================================================
 export const clientLikedDesigns = pgTable('client_liked_designs', {
-  clientId: uuid('client_id').notNull().references(() => clientProfiles.userId, { onDelete: 'cascade' }),
+  clientId: uuid('client_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   nailDesignId: uuid('nail_design_id').notNull().references(() => nailDesigns.id, { onDelete: 'cascade' }),
 });
 
@@ -105,9 +105,9 @@ export const masterDesignsRelations = relations(masterDesigns, ({ one }) => ({
 }));
 
 export const clientLikedDesignsRelations = relations(clientLikedDesigns, ({ one }) => ({
-  client: one(clientProfiles, {
+  user: one(users, {
     fields: [clientLikedDesigns.clientId],
-    references: [clientProfiles.userId],
+    references: [users.id],
   }),
   nailDesign: one(nailDesigns, {
     fields: [clientLikedDesigns.nailDesignId],

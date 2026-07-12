@@ -90,11 +90,14 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
     });
   };
 
-  // Preselect design when arriving from TikTok card
+  const preselectionDone = useRef(false);
+
+  // Preselect design when arriving from TikTok card — once only
   useEffect(() => {
-    if (preselectedDesignId && designs.length > 0) {
+    if (preselectedDesignId && designs.length > 0 && !preselectionDone.current) {
       const found = (designs as DesignItem[]).find((d) => d.id === preselectedDesignId);
-      if (found && selectedDesign?.id !== found.id) {
+      if (found) {
+        preselectionDone.current = true;
         setSelectedDesign(found);
         setDesignsVisible((v) => {
           const idx = (designs as DesignItem[]).indexOf(found);
@@ -102,10 +105,12 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
         });
       }
     }
-  }, [preselectedDesignId, designs, selectedDesign]);
+  }, [preselectedDesignId, designs]);
 
   // Scroll to newly appeared sections (double-rAF prevents race with DOM commit)
   useEffect(() => { if (selectedDesign) scrollToRef(dateRef); }, [selectedDesign]);
+  // Re-scroll when slots finish loading — dates may have expanded the date section
+  useEffect(() => { if (selectedDesign && !slotsLoading && availableSlots.length > 0) scrollToRef(dateRef); }, [slotsLoading, selectedDesign, availableSlots.length]);
   useEffect(() => { if (selectedDate) scrollToRef(timeRef); }, [selectedDate]);
   useEffect(() => { if (selectedTime) scrollToRef(notesRef); }, [selectedTime]);
 

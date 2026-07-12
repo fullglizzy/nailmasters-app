@@ -25,7 +25,7 @@ export function AppHeader() {
             { href: '/explore', label: 'Лента' },
             { href: '/trending', label: 'Популярное' },
             { href: '/', label: 'Главная' },
-            { href: '/client-info', label: 'Для заказчика' },
+            //{ href: '/client-info', label: 'Для заказчика' },
             ...(role === 'admin' ? [{ href: '/admin' as string, label: 'Админка' }] : []),
           ].map((item) => (
             <Link
@@ -52,7 +52,7 @@ export function AppHeader() {
             <Search className="h-[18px] w-[18px]" />
           </Link>
 
-          {token && !isGuest && (
+          {token && (
             <Link
               href="/create"
               aria-label="Создать дизайн"

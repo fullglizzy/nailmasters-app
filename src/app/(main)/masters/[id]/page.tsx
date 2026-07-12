@@ -22,8 +22,9 @@ export default function MasterProfilePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const bookDesignId = searchParams.get('bookDesign');
-  const [showBooking, setShowBooking] = useState(!!bookDesignId);
+  const urlBookDesignId = searchParams.get('bookDesign');
+  const [preselectedDesignId, setPreselectedDesignId] = useState<string | undefined>(urlBookDesignId || undefined);
+  const [showBooking, setShowBooking] = useState(!!urlBookDesignId);
   const [showReview, setShowReview] = useState(false);
   const [reviewRefreshKey, setReviewRefreshKey] = useState(0);
   const { role } = useAuthState();
@@ -271,8 +272,8 @@ export default function MasterProfilePage() {
             masterId={id}
             masterName={master.fullName}
             masterInfo={{ fullName: master.fullName, rating: master.rating, city: master.city, reviewsCount: master.reviewsCount }}
-            onClose={() => setShowBooking(false)}
-            preselectedDesignId={bookDesignId || undefined}
+            onClose={() => { setShowBooking(false); setPreselectedDesignId(undefined); }}
+            preselectedDesignId={preselectedDesignId}
           />
         )}
         {showReview && <ReviewModal open={showReview} onClose={() => setShowReview(false)} masterId={id} masterName={master.fullName} onSubmitted={() => setReviewRefreshKey(k => k + 1)} />}
