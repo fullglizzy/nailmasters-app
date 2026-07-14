@@ -71,10 +71,11 @@ export const GET = withOptionalAuth(async (req: NextRequest) => {
 
     // Поиск
     if (search) {
+      const likeSafe = search.replace(/[%_]/g, '\\$&');
       conditions.push(
         or(
-          sql`${schema.nailDesigns.title} ILIKE ${`%${search}%`}`,
-          sql`${schema.nailDesigns.description} ILIKE ${`%${search}%`}`,
+          sql`${schema.nailDesigns.title} ILIKE ${`%${likeSafe}%`}`,
+          sql`${schema.nailDesigns.description} ILIKE ${`%${likeSafe}%`}`,
         )!,
       );
     }

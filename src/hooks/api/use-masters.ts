@@ -104,6 +104,14 @@ export function useMyReviews() {
   });
 }
 
+export function useSearchMasters(params: Record<string, string | number | boolean | undefined>) {
+  return useQuery({
+    queryKey: [...masterKeys.all, 'search', params],
+    queryFn: () => apiGet<{ masters: Master[]; total: number }>('/api/masters/search', params),
+    enabled: !!params.q,
+  });
+}
+
 // ── Mutations ─────────────────────────────────────────────
 
 export function useCreateService() {

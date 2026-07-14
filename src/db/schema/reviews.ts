@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, varchar, boolean, timestamp, date } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, varchar, boolean, timestamp, date, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { clientProfiles, masterProfiles } from './users';
 import { nailDesigns } from './designs';
@@ -17,7 +17,11 @@ export const reviews = pgTable('reviews', {
   nailMasterId: uuid('nail_master_id').references(() => masterProfiles.userId, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  designIdx: index('idx_reviews_design').on(table.nailDesignId),
+  masterIdx: index('idx_reviews_master').on(table.nailMasterId),
+  clientIdx: index('idx_reviews_client').on(table.clientId),
+}));
 
 // ============================================================
 // master_ratings — рейтинг мастеров (числовые оценки)
@@ -29,7 +33,10 @@ export const masterRatings = pgTable('master_ratings', {
   createdAt: date('created_at').defaultNow().notNull(),
   nailMasterId: uuid('nail_master_id').notNull().references(() => masterProfiles.userId, { onDelete: 'cascade' }),
   clientId: uuid('client_id').notNull().references(() => clientProfiles.userId, { onDelete: 'cascade' }),
-});
+}, (table) => ({
+  masterIdx: index('idx_ratings_master').on(table.nailMasterId),
+  clientIdx: index('idx_ratings_client').on(table.clientId),
+}));
 
 // ============================================================
 // Relations

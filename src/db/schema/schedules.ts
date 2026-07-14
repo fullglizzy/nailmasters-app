@@ -1,4 +1,4 @@
-import { pgTable, uuid, date, time, varchar, text, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, date, time, varchar, text, timestamp, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { masterProfiles } from './users';
 
@@ -15,7 +15,10 @@ export const schedules = pgTable('schedules', {
   masterId: uuid('master_id').notNull().references(() => masterProfiles.userId, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  masterIdx: index('idx_schedules_master').on(table.masterId),
+  dateIdx: index('idx_schedules_date').on(table.workDate),
+}));
 
 export const schedulesRelations = relations(schedules, ({ one }) => ({
   nailMaster: one(masterProfiles, {

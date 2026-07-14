@@ -3,10 +3,22 @@ import { cookies } from 'next/headers';
 import type { UserRole } from '@/db/schema/users';
 
 // JWT конфигурация
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'dev-jwt-secret-change-me');
-const JWT_REFRESH_SECRET = new TextEncoder().encode(process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-change-me');
+const JWT_SECRET = getSecret('JWT_SECRET', 'dev-jwt-secret-change-me');
+const JWT_REFRESH_SECRET = getSecret('JWT_REFRESH_SECRET', 'dev-refresh-secret-change-me');
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '15m';
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
+
+function getSecret(envKey: string, devFallback: string): Uint8Array {
+  const value = process.env[envKey];
+  if (!value) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`${envKey} must be set in production`);
+    }
+    console.warn(`⚠ ${envKey} not set — using dev fallback. Do NOT use in production.`);
+    return new TextEncoder().encode(devFallback);
+  }
+  return new TextEncoder().encode(value);
+}
 
 export interface TokenPayload {
   userId: string;

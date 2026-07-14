@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, jsonb, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, boolean, jsonb, timestamp, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { users } from './users';
 import { orders } from './orders';
@@ -27,7 +27,10 @@ export const notifications = pgTable('notifications', {
   recipientId: uuid('recipient_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   relatedOrderId: uuid('related_order_id').references(() => orders.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  recipientIdx: index('idx_notifications_recipient').on(table.recipientId),
+  createdIdx: index('idx_notifications_created').on(table.createdAt),
+}));
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   recipient: one(users, {

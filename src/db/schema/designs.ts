@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, jsonb, integer, boolean, timestamp, decimal, pgEnum, primaryKey, customType } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, jsonb, integer, boolean, timestamp, decimal, pgEnum, primaryKey, customType, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { users, clientProfiles, masterProfiles, adminProfiles } from './users';
 
@@ -53,10 +53,15 @@ export const nailDesigns = pgTable('nail_designs', {
   searchVector: tsvector('search_vector'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  sourceIdx: index('idx_designs_source').on(table.source),
+  typeIdx: index('idx_designs_type').on(table.type),
+  clientUploadIdx: index('idx_designs_uploaded_client').on(table.uploadedByClientId),
+  masterUploadIdx: index('idx_designs_uploaded_master').on(table.uploadedByMasterId),
+}));
 
 // ============================================================
-// master_designs — «Я так могу» связь мастера с дизайном (старая система)
+// master_designs — «Я так могу»: мастер отмечает дизайн как выполняемый (портфолио)
 // ============================================================
 export const masterDesigns = pgTable('master_designs', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -67,10 +72,13 @@ export const masterDesigns = pgTable('master_designs', {
   nailMasterId: uuid('nail_master_id').notNull().references(() => masterProfiles.userId, { onDelete: 'cascade' }),
   nailDesignId: uuid('nail_design_id').notNull().references(() => nailDesigns.id, { onDelete: 'cascade' }),
   addedAt: timestamp('added_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  masterIdx: index('idx_master_designs_master').on(table.nailMasterId),
+  designIdx: index('idx_master_designs_design').on(table.nailDesignId),
+}));
 
 // ============================================================
-// client_liked_designs — junction table
+// client_liked_designs — избранное клиентов
 // ============================================================
 export const clientLikedDesigns = pgTable('client_liked_designs', {
   clientId: uuid('client_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

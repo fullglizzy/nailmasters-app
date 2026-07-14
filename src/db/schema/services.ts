@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, integer, boolean, decimal, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, integer, boolean, decimal, timestamp, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { masterProfiles } from './users';
 import { nailDesigns } from './designs';
@@ -16,10 +16,12 @@ export const masterServices = pgTable('master_services', {
   masterId: uuid('master_id').notNull().references(() => masterProfiles.userId, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  masterIdx: index('idx_services_master').on(table.masterId),
+}));
 
 // ============================================================
-// master_service_designs — привязка дизайнов к услугам (новая система)
+// master_service_designs — привязка дизайнов к услугам
 // ============================================================
 export const masterServiceDesigns = pgTable('master_service_designs', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -31,7 +33,10 @@ export const masterServiceDesigns = pgTable('master_service_designs', {
   nailDesignId: uuid('nail_design_id').notNull().references(() => nailDesigns.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  serviceIdx: index('idx_service_designs_service').on(table.masterServiceId),
+  designIdx: index('idx_service_designs_design').on(table.nailDesignId),
+}));
 
 // ============================================================
 // Relations

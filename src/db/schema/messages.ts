@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, jsonb, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, timestamp, jsonb, index, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { users } from './users';
 import { orders } from './orders';
@@ -22,7 +22,11 @@ export const messages = pgTable('messages', {
   editedAt: timestamp('edited_at'),
   isRead: boolean('is_read').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  senderIdx: index('idx_messages_sender').on(table.senderId),
+  receiverIdx: index('idx_messages_receiver').on(table.receiverId),
+  createdIdx: index('idx_messages_created').on(table.createdAt),
+}));
 
 export const messagesRelations = relations(messages, ({ one }) => ({
   sender: one(users, {

@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import postgres from 'postgres';
 
-const dbUrl = process.env.DATABASE_URL || 'postgres://nailmasters:nailmasters_secret@localhost:5432/nailmasters';
+const dbUrl = process.env.DATABASE_URL!;
 
 async function main() {
   const sql = postgres(dbUrl, { max: 1 });

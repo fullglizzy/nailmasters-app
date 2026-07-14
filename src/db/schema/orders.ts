@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, integer, decimal, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, integer, decimal, timestamp, jsonb, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { clientProfiles, masterProfiles } from './users';
 import { nailDesigns } from './designs';
@@ -56,7 +56,12 @@ export const orders = pgTable('orders', {
   designSnapshotId: uuid('design_snapshot_id').references(() => orderDesignSnapshots.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  clientIdx: index('idx_orders_client').on(table.clientId),
+  masterIdx: index('idx_orders_master').on(table.nailMasterId),
+  statusIdx: index('idx_orders_status').on(table.status),
+  createdIdx: index('idx_orders_created').on(table.createdAt),
+}));
 
 // ============================================================
 // Relations

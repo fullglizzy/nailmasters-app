@@ -30,12 +30,14 @@ export async function searchDesigns(filters: DesignFilters) {
   // Full-text search (tsvector + GIN index)
   if (search) {
     const tsquery = search.replace(/[^a-zA-Zа-яА-ЯёЁ0-9\s]/g, ' ').trim().split(/\s+/).filter(w => w.length > 0).join(' & ');
+    // Экранируем LIKE-символы для ILIKE-пути
+    const likeSafe = search.replace(/[%_]/g, '\\$&');
     if (tsquery) {
       conditions.push(
         or(
           sql`search_vector @@ to_tsquery('russian', ${tsquery})`,
-          sql`${schema.nailDesigns.title} ILIKE ${`%${search}%`}`,
-          sql`${schema.nailDesigns.description} ILIKE ${`%${search}%`}`,
+          sql`${schema.nailDesigns.title} ILIKE ${`%${likeSafe}%`}`,
+          sql`${schema.nailDesigns.description} ILIKE ${`%${likeSafe}%`}`,
         )!,
       );
     }
@@ -104,11 +106,12 @@ export async function searchMasters(params: {
   ];
 
   if (query) {
+    const likeSafe = query.replace(/[%_]/g, '\\$&');
     conditions.push(
       or(
-        ilike(schema.masterProfiles.fullName, `%${query}%`),
-        ilike(schema.masterProfiles.description || '', `%${query}%`),
-        ilike(schema.masterProfiles.city || '', `%${query}%`),
+        ilike(schema.masterProfiles.fullName, `%${likeSafe}%`),
+        ilike(schema.masterProfiles.description || '', `%${likeSafe}%`),
+        ilike(schema.masterProfiles.city || '', `%${likeSafe}%`),
       )!,
     );
   }

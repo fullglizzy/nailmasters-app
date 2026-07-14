@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, primaryKey, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, timestamp, primaryKey, index, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { users, clientProfiles } from './users';
 import { nailDesigns } from './designs';
@@ -15,7 +15,10 @@ export const comments = pgTable('comments', {
   designId: uuid('design_id').notNull().references(() => nailDesigns.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
-});
+}, (table) => ({
+  designIdx: index('idx_comments_design').on(table.designId),
+  authorIdx: index('idx_comments_author').on(table.authorId),
+}));
 
 // ============================================================
 // comment_likes — кто лайкнул какой комментарий

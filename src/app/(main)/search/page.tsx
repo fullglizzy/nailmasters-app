@@ -4,14 +4,13 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Search, X, Star, Clock, Calendar, MapPin,
-  Trash2, RotateCcw, SlidersHorizontal, Sparkles, Wallet, Shield, Award,
-  Scissors, Palette, Tag
+  ArrowLeft, Search, X, Star, Trash2, Sparkles, SlidersHorizontal,
+  Clock, Calendar, MapPin, Wallet, Shield, Award, Scissors, Palette, Tag
 } from 'lucide-react';
 import { DesignCard } from '@/components/design/design-card';
 import { MasterCard } from '@/components/master/master-card';
 import { PolishSwatchGrid } from '@/components/shared/polish-swatch';
-import { useDesigns } from '@/hooks/api';
+import { useDesigns, useSearchMasters } from '@/hooks/api';
 import { useLikedIds } from '@/hooks/use-liked-ids';
 import { AVAILABLE_COLORS } from '@/data/colors';
 import { pluralRu } from '@/lib/utils';
@@ -58,18 +57,8 @@ export default function SearchPage() {
   const [committedQuery, setCommittedQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'designs' | 'masters'>('designs');
   const [history, setHistory] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [designs, setDesigns] = useState<DesignItem[]>([]);
-  const [masters, setMasters] = useState<MasterItem[]>([]);
   const [didSearch, setDidSearch] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-
-  // RQ for designs
-  const { data: rqDesigns, isLoading: dLoading } = useDesigns(
-    committedQuery && didSearch
-      ? { search: committedQuery, limit: 40, includeOwn: true }
-      : { limit: 0 },
-  );
 
   /* Design filters */
   const [designFilters, setDesignFilters] = useState({
@@ -86,6 +75,28 @@ export default function SearchPage() {
     sterilizationTags: [] as string[], availability: '',
     workFormat: [] as string[],
   });
+
+  // RQ for designs + masters (both via React Query)
+  const { data: rqDesigns = [], isLoading: dLoading } = useDesigns({
+    search: committedQuery || undefined,
+    ...(designFilters.type ? { type: designFilters.type } : {}),
+    ...(designFilters.source ? { source: designFilters.source } : {}),
+    ...(designFilters.color ? { color: designFilters.color } : {}),
+    ...(designFilters.length ? { length: designFilters.length } : {}),
+    ...(designFilters.shape ? { shape: designFilters.shape } : {}),
+    ...(designFilters.season ? { season: designFilters.season } : {}),
+    limit: 40,
+    includeOwn: true,
+  });
+
+  const { data: mastersData } = useSearchMasters({
+    q: committedQuery || '',
+    ...(masterFilters.city ? { city: masterFilters.city } : {}),
+    ...(masterFilters.specialties?.length ? { specialty: masterFilters.specialties[0] } : {}),
+    ...(masterFilters.minRating ? { minRating: masterFilters.minRating } : {}),
+    limit: 40,
+  });
+  const masters = (mastersData?.masters || []) as unknown as MasterItem[];
 
   /* ── Keyboard shortcut: / focuses search ── */
   useEffect(() => {
@@ -122,60 +133,35 @@ export default function SearchPage() {
     setMasterFilters({ specialties: [], city: '', minRating: '', minPrice: '', maxPrice: '', minAge: '', maxAge: '', minExperienceYears: '', sterilizationTags: [], availability: '', workFormat: [] });
   };
 
-  /* ── Sync RQ designs → local state ── */
-  useEffect(() => {
-    if (!didSearch) return;
-    const d = (rqDesigns || []) as DesignItem[];
-    setDesigns(d);
-  }, [rqDesigns, didSearch]);
-
-  /* ── Fetch masters via /api/masters/search (dedicated endpoint) ── */
-  useEffect(() => {
-    if (!committedQuery || !didSearch) { setMasters([]); return; }
-    let cancelled = false;
-    setLoading(true);
-    fetch(`/api/masters/search?q=${encodeURIComponent(committedQuery)}&limit=100`)
-      .then(r => r.json())
-      .then(json => {
-        if (cancelled) return;
-        const data = json.success && json.data ? json.data : {};
-        const list: MasterItem[] = Array.isArray(data.masters) ? data.masters : Array.isArray(data) ? data : [];
-        setMasters(list);
-        if (designs.length === 0 && list.length > 0) setActiveTab('masters');
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [committedQuery, didSearch]);
-
-  // Loading = RQ loading OR masters fetch loading
-  const isSearchLoading = dLoading || loading;
+  // Loading = RQ loading + masters RQ loading
+  const isSearchLoading = dLoading || (!!committedQuery && !mastersData);
 
   // Auto-switch to tab with results
   useEffect(() => {
-    if (!didSearch || dLoading || loading) return;
-    const dc = (rqDesigns || []).length;
+    if (!didSearch || dLoading) return;
+    const dc = rqDesigns.length;
     const mc = masters.length;
     if (dc > 0 && mc === 0) setActiveTab('designs');
     else if (dc === 0 && mc > 0) setActiveTab('masters');
-  }, [didSearch, dLoading, loading, rqDesigns, masters]);
+  }, [didSearch, dLoading, rqDesigns, masters]);
 
   /* ── Dynamic filter options ── */
-  const availableDesignFilters = useMemo(() => ({
-    types: [...new Set(designs.map(d => d.type).filter(Boolean))],
-    sources: [...new Set(designs.map(d => d.source).filter(Boolean))],
-    lengths: [...new Set(designs.map(d => d.length).filter(Boolean))],
-    shapes: [...new Set(designs.map(d => d.shape).filter(Boolean))],
-    seasons: [...new Set(designs.map(d => d.season).filter(Boolean))],
-    serviceFormats: [...new Set(designs.map(d => d.serviceFormat).filter(Boolean))],
-    allTags: [...new Set(designs.flatMap(d => d.tags || []).filter(Boolean))],
-    allTechniques: [...new Set(designs.flatMap(d => d.techniques || []).filter(Boolean))],
-    allMaterials: [...new Set(designs.flatMap(d => d.materials || []).filter(Boolean))],
-    allDecorTags: [...new Set(designs.flatMap(d => d.decorTags || []).filter(Boolean))],
-    allOccasionTags: [...new Set(designs.flatMap(d => d.occasionTags || []).filter(Boolean))],
-    allMoodTags: [...new Set(designs.flatMap(d => d.moodTags || []).filter(Boolean))],
-  }), [designs]);
+  const availableDesignFilters = useMemo(() => {
+    const d = rqDesigns as unknown as DesignItem[];
+    return {
+    types: [...new Set(d.map(x => x.type).filter(Boolean))] as string[],
+    sources: [...new Set(d.map(x => x.source).filter(Boolean))] as string[],
+    lengths: [...new Set(d.map(x => x.length).filter(Boolean))] as string[],
+    shapes: [...new Set(d.map(x => x.shape).filter(Boolean))] as string[],
+    seasons: [...new Set(d.map(x => x.season).filter(Boolean))] as string[],
+    serviceFormats: [...new Set(d.map(x => x.serviceFormat).filter(Boolean))] as string[],
+    allTags: [...new Set(d.flatMap(x => x.tags || []).filter(Boolean))] as string[],
+    allTechniques: [...new Set(d.flatMap(x => x.techniques || []).filter(Boolean))] as string[],
+    allMaterials: [...new Set(d.flatMap(x => x.materials || []).filter(Boolean))] as string[],
+    allDecorTags: [...new Set(d.flatMap(x => x.decorTags || []).filter(Boolean))] as string[],
+    allOccasionTags: [...new Set(d.flatMap(x => x.occasionTags || []).filter(Boolean))] as string[],
+    allMoodTags: [...new Set(d.flatMap(x => x.moodTags || []).filter(Boolean))] as string[],
+  }}, [rqDesigns]);
 
   const availableMasterFilters = useMemo(() => ({
     specialties: [...new Set(masters.flatMap(m => m.specialties || []).filter(Boolean))],
@@ -183,12 +169,12 @@ export default function SearchPage() {
     workFormats: [...new Set(masters.flatMap(m => m.workFormat || []).filter(Boolean))],
   }), [masters]);
 
-  const designTags = useMemo(() => [...new Set(designs.flatMap(d => d.tags || []).filter(Boolean))].slice(0, 10), [designs]);
+  const designTags = useMemo(() => [...new Set(rqDesigns.flatMap(d => d.tags || []).filter(Boolean))].slice(0, 10), [rqDesigns]);
   const masterSpecialties = useMemo(() => [...new Set(masters.flatMap(m => m.specialties || []).filter(Boolean))].slice(0, 10), [masters]);
 
   /* ── Client-side filtering ── */
   const filteredDesigns = useMemo(() => {
-    let f = designs;
+    let f = rqDesigns as DesignItem[];
     if (designFilters.type) f = f.filter(d => d.type === designFilters.type);
     if (designFilters.source) f = f.filter(d => d.source === designFilters.source);
     if (designFilters.color) f = f.filter(d => d.color?.toLowerCase().includes(designFilters.color.toLowerCase()));
@@ -203,7 +189,7 @@ export default function SearchPage() {
     if (designFilters.occasionTags.length) f = f.filter(d => designFilters.occasionTags.some(t => d.occasionTags?.includes(t)));
     if (designFilters.moodTags.length) f = f.filter(d => designFilters.moodTags.some(t => d.moodTags?.includes(t)));
     return f;
-  }, [designs, designFilters]);
+  }, [rqDesigns, designFilters]);
 
   const filteredMasters = useMemo(() => {
     let f = masters;
@@ -386,7 +372,7 @@ export default function SearchPage() {
                 }`}
               >
                 Дизайны
-                {designs.length > 0 && (
+                {rqDesigns.length > 0 && (
                   <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-xs">{filteredDesigns.length}</span>
                 )}
               </button>
