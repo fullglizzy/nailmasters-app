@@ -2,8 +2,8 @@
 // React Query хуки для профиля и уведомлений
 // ============================================================
 
-import { useQuery } from '@tanstack/react-query';
-import { apiGet } from '@/lib/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiGet, apiPut } from '@/lib/api';
 import { useAuth } from '@/components/providers/auth-provider';
 import type { UserProfile, Notification } from '@/lib/types';
 
@@ -43,5 +43,21 @@ export function useNotifications() {
     queryKey: [...notificationKeys.all, user?.id],
     queryFn: () => apiGet<Notification[]>('/api/notifications'),
     enabled: isAuthenticated,
+  });
+}
+
+// ── Mutations ─────────────────────────────────────────────
+
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      await ensureAuth();
+      return apiPut<unknown>('/api/auth/profile', body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: profileKeys.all });
+    },
   });
 }

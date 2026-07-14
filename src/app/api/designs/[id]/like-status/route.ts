@@ -1,18 +1,24 @@
 import { NextRequest } from 'next/server';
 import { db, schema } from '@/lib/db';
 import { and, eq } from 'drizzle-orm';
-import { successResponse } from '@/lib/response';
+import { successResponse, errorResponse } from '@/lib/response';
 import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
+import { logger } from '@/lib/logger';
 
 export const GET = withAuth(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-  const user = (req as AuthenticatedRequest).user!;
-  const { id } = await params;
+  try {
+    const user = (req as AuthenticatedRequest).user!;
+    const { id } = await params;
 
-  const existing = await db
-    .select()
-    .from(schema.clientLikedDesigns)
-    .where(and(eq(schema.clientLikedDesigns.clientId, user.userId), eq(schema.clientLikedDesigns.nailDesignId, id)))
-    .limit(1);
+    const existing = await db
+      .select()
+      .from(schema.clientLikedDesigns)
+      .where(and(eq(schema.clientLikedDesigns.clientId, user.userId), eq(schema.clientLikedDesigns.nailDesignId, id)))
+      .limit(1);
 
-  return successResponse({ liked: existing.length > 0 });
+    return successResponse({ liked: existing.length > 0 });
+  } catch (error) {
+    logger.error(error, 'GET /api/designs/[id]/like-status error');
+    return errorResponse('Внутренняя ошибка сервера', 500);
+  }
 });

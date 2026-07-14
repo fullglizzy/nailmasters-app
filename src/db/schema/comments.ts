@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, timestamp, primaryKey, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { users, clientProfiles } from './users';
 import { nailDesigns } from './designs';
@@ -9,7 +9,7 @@ import { nailDesigns } from './designs';
 export const comments = pgTable('comments', {
   id: uuid('id').defaultRandom().primaryKey(),
   text: text('text').notNull(),
-  parentCommentId: uuid('parent_comment_id'),
+  parentCommentId: uuid('parent_comment_id').references((): AnyPgColumn => comments.id, { onDelete: 'cascade' }),
   likesCount: integer('likes_count').default(0).notNull(),
   authorId: uuid('author_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   designId: uuid('design_id').notNull().references(() => nailDesigns.id, { onDelete: 'cascade' }),
@@ -23,7 +23,9 @@ export const comments = pgTable('comments', {
 export const commentLikes = pgTable('comment_likes', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   commentId: uuid('comment_id').notNull().references(() => comments.id, { onDelete: 'cascade' }),
-});
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.commentId] }),
+}));
 
 export const commentsRelations = relations(comments, ({ one, many }) => ({
   author: one(users, {

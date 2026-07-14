@@ -2,8 +2,8 @@
 // React Query хуки для заказов
 // ============================================================
 
-import { useQuery } from '@tanstack/react-query';
-import { apiGet } from '@/lib/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiGet, apiPost, apiPut } from '@/lib/api';
 import { useAuth } from '@/components/providers/auth-provider';
 import type { OrderEnriched } from '@/lib/types';
 
@@ -27,5 +27,49 @@ export function useOrders(status?: string) {
     enabled: isAuthenticated,
     refetchOnMount: true,
     staleTime: 0,
+  });
+}
+
+// ── Mutations ─────────────────────────────────────────────
+
+export function useOrderMutation() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      await ensureAuth();
+      return apiPost<unknown>('/api/orders', body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: orderKeys.all });
+    },
+  });
+}
+
+export function useCancelOrder() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      await ensureAuth();
+      return apiPut<unknown>(`/api/orders/${orderId}/cancel`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: orderKeys.all });
+    },
+  });
+}
+
+export function useConfirmOrder() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      await ensureAuth();
+      return apiPut<unknown>(`/api/orders/${orderId}/confirm`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: orderKeys.all });
+    },
   });
 }

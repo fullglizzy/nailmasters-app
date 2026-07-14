@@ -4,6 +4,14 @@ import { eq, and, or, desc, asc, sql, inArray, ne } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/response';
 import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
+
+const createMessageSchema = z.object({
+  text: z.string().min(1, 'Текст обязателен').max(5000),
+  receiverId: z.string().uuid('Некорректный ID получателя'),
+  attachments: z.array(z.any()).optional(),
+  replyToId: z.string().uuid().optional(),
+});
 
 // GET /api/messages — список диалогов, сообщения с пользователем, или только счётчик непрочитанных
 export const GET = withAuth(async (req: NextRequest) => {
@@ -141,24 +149,19 @@ export const GET = withAuth(async (req: NextRequest) => {
 export const POST = withAuth(async (req: NextRequest) => {
   const user = (req as AuthenticatedRequest).user!;
   const body = await req.json();
-
-  const hasText = body.text?.trim();
-  const hasAttachments = body.attachments?.length > 0;
-  if (!hasText && !hasAttachments) {
-    return errorResponse('Текст или вложение обязательны', 422);
-  }
-  if (!body.receiverId) return errorResponse('Получатель обязателен', 422);
+  const parsed = createMessageSchema.safeParse(body);
+  if (!parsed.success) return errorResponse(parsed.error.errors.map(e => e.message).join('; '), 422);
 
   const [msg] = await db
     .insert(schema.messages)
     .values({
       id: uuid(),
-      text: (body.text || '').trim().slice(0, 5000),
+      text: parsed.data.text.trim().slice(0, 5000),
       senderId: user.userId,
-      receiverId: body.receiverId,
+      receiverId: parsed.data.receiverId,
       relatedOrderId: body.relatedOrderId || null,
-      attachments: body.attachments || null,
-      replyToId: body.replyToId || null,
+      attachments: parsed.data.attachments || null,
+      replyToId: parsed.data.replyToId || null,
       replyToText: body.replyToText || null,
       replyToSenderName: body.replyToSenderName || null,
     })

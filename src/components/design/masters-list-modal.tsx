@@ -7,6 +7,7 @@ import { useModal } from '@/hooks/use-modal';
 import { DistanceBadge } from '@/components/shared/distance-badge';
 import { useGeolocation } from '@/hooks/use-geolocation';
 import { useDesignMasters } from '@/hooks/api';
+import { pluralRu } from '@/lib/utils';
 import type { Master } from '@/lib/types';
 
 /* ── Types ──────────────────────────────────────────────── */
@@ -235,7 +236,7 @@ export function MastersListModal({ designId, designTitle, open, onClose }: Props
               </h2>
               {masters.length > 0 && (
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {masters.length} {plural(masters.length, 'мастер', 'мастера', 'мастеров')}
+                  {masters.length} {pluralRu(masters.length, 'мастер', 'мастера', 'мастеров')}
                   {priceRange && <span className="ml-1.5 font-medium text-foreground">{priceRange}</span>}
                 </p>
               )}
@@ -329,10 +330,3 @@ export function MastersListModal({ designId, designTitle, open, onClose }: Props
 
 /* ── Helpers ────────────────────────────────────────────── */
 
-function plural(n: number, one: string, few: string, many: string): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
-  return many;
-}

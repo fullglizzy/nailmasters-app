@@ -7,8 +7,9 @@ import { sendNotification } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
 
 export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-  const user = (req as AuthenticatedRequest).user!;
-  const { id } = await params;
+  try {
+    const user = (req as AuthenticatedRequest).user!;
+    const { id } = await params;
 
   const orders = await db.select().from(schema.orders).where(eq(schema.orders.id, id)).limit(1);
   if (!orders.length) return errorResponse('Заказ не найден', 404);
@@ -52,5 +53,9 @@ export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promi
 
   sendNotification(order.nailMasterId, { id: notif.id, type: 'order_cancelled', title: 'Заказ отменён', message: notif.message, createdAt: notif.createdAt }).catch(() => {});
 
-  return successResponse(null, 'Заказ отменен');
+    return successResponse(null, 'Заказ отменен');
+  } catch (error) {
+    logger.error(error, 'PUT /api/orders/[id]/cancel error');
+    return errorResponse('Внутренняя ошибка сервера', 500);
+  }
 });

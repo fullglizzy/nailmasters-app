@@ -60,7 +60,7 @@ export function ReviewModal({ open, onClose, masterId, masterName, onSubmitted }
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div className="fixed inset-0 bg-black/50 animate-in fade-in duration-200" />
-      <div className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-background p-6 shadow-xl modal-enter" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Оставить отзыв" className="relative z-10 w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-background p-6 shadow-xl modal-enter" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="font-bold text-lg">Оставить отзыв</h2>

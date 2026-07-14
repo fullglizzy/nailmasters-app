@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db, schema } from '@/lib/db';
 import { eq, and, desc, or, sql, inArray } from 'drizzle-orm';
-import { createOrderSchema } from '@/lib/validators';
+import { createOrderSchema, paginationSchema } from '@/lib/validators';
 import { successResponse, errorResponse, paginatedResponse } from '@/lib/response';
 import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
 import { createDesignSnapshot } from '@/lib/design-snapshot';
@@ -15,8 +15,12 @@ export const GET = withAuth(async (req: NextRequest) => {
   try {
     const user = (req as AuthenticatedRequest).user!;
     const url = new URL(req.url);
-    const page = parseInt(url.searchParams.get('page') || '1');
-    const limit = parseInt(url.searchParams.get('limit') || '20');
+    const paginationQuery = paginationSchema.safeParse({
+      page: url.searchParams.get('page') || undefined,
+      limit: url.searchParams.get('limit') || undefined,
+    });
+    if (!paginationQuery.success) return errorResponse(paginationQuery.error.errors.map(e => e.message).join('; '), 422);
+    const { page, limit } = paginationQuery.data;
     const offset = (page - 1) * limit;
     const status = url.searchParams.get('status');
 

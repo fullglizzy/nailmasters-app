@@ -14,6 +14,7 @@ import { PolishSwatchGrid } from '@/components/shared/polish-swatch';
 import { useDesigns } from '@/hooks/api';
 import { useLikedIds } from '@/hooks/use-liked-ids';
 import { AVAILABLE_COLORS } from '@/data/colors';
+import { pluralRu } from '@/lib/utils';
 
 /* ───────────────────────────────────────────
    Constants
@@ -370,8 +371,8 @@ export default function SearchPage() {
               </div>
               <p className="text-sm text-muted-foreground">
                 {activeTab === 'designs'
-                  ? `${filteredDesigns.length} ${pluralize(filteredDesigns.length, 'дизайн', 'дизайна', 'дизайнов')}`
-                  : `${filteredMasters.length} ${pluralize(filteredMasters.length, 'мастер', 'мастера', 'мастеров')}`
+                  ? `${filteredDesigns.length} ${pluralRu(filteredDesigns.length, 'дизайн', 'дизайна', 'дизайнов')}`
+                  : `${filteredMasters.length} ${pluralRu(filteredMasters.length, 'мастер', 'мастера', 'мастеров')}`
                 }
               </p>
             </div>
@@ -885,13 +886,4 @@ function FilterChipSection({ label, items, selected, onToggle }: {
       </div>
     </div>
   );
-}
-
-/* ── Russian plural helper ── */
-function pluralize(n: number, one: string, few: string, many: string): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
-  return many;
 }

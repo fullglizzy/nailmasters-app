@@ -1,16 +1,17 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '**' },
     ],
   },
-  experimental: {
-    serverActions: {
-      bodySizeLimit: '100mb',
-    },
+  // serverActions is top-level in Next.js 16 (was experimental in 15)
+  serverActions: {
+    bodySizeLimit: '100mb',
   },
-  // standalone отключен для Windows-совместимости при разработке
+  // standalone для Docker
+  output: 'standalone',
 };
 
 export default nextConfig;

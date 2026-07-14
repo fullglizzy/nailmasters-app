@@ -6,6 +6,7 @@ import { UserAvatar } from '@/components/shared/user-avatar';
 import { AuthGuardModal } from '@/components/auth/auth-guard-modal';
 import { useAuth } from '@/components/providers/auth-provider';
 import { useComments } from '@/hooks/api';
+import { pluralRu } from '@/lib/utils';
 
 /* ── Types ──────────────────────────────────────────────── */
 
@@ -55,14 +56,6 @@ function formatRelative(dateStr: string): string {
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}д`;
   return date.toLocaleDateString('ru');
-}
-
-function plural(n: number, one: string, few: string, many: string): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
-  return many;
 }
 
 /* ── Memoized CommentItem ───────────────────────────────── */
@@ -142,7 +135,7 @@ const CommentItem = memo(function CommentItem({
 
       {hasReplies && !isExpanded && (
         <button onClick={() => onToggleReplies(comment.id)} className="ml-11 text-xs text-muted-foreground hover:text-primary transition-colors">
-          —— Показать {comment.replies!.length} {plural(comment.replies!.length, 'ответ', 'ответа', 'ответов')}
+          —— Показать {comment.replies!.length} {pluralRu(comment.replies!.length, 'ответ', 'ответа', 'ответов')}
         </button>
       )}
 
@@ -309,7 +302,7 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div className="fixed inset-0 bg-black/50 animate-in fade-in duration-200" />
-      <div className="relative z-10 w-full sm:max-w-lg max-h-[85vh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-background shadow-xl modal-enter" onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Комментарии" className="relative z-10 w-full sm:max-w-lg max-h-[85vh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-background shadow-xl modal-enter" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between p-4 border-b">
           <div className="min-w-0">

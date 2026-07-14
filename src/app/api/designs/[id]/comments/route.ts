@@ -4,6 +4,7 @@ import { eq, desc, sql } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/response';
 import { withAuth, withOptionalAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
 import { createCommentSchema } from '@/lib/validators';
+import { logger } from '@/lib/logger';
 
 // GET /api/designs/:id/comments — комментарии к дизайну
 export const GET = withOptionalAuth(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
@@ -39,18 +40,23 @@ export const GET = withOptionalAuth(async (req: NextRequest, { params }: { param
 
 // POST /api/designs/:id/comments — создать комментарий
 export const POST = withAuth(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-  const user = (req as AuthenticatedRequest).user!;
-  const { id } = await params;
-  const body = await req.json();
-  const parsed = createCommentSchema.safeParse(body);
-  if (!parsed.success) return errorResponse('Текст комментария обязателен', 422);
+  try {
+    const user = (req as AuthenticatedRequest).user!;
+    const { id } = await params;
+    const body = await req.json();
+    const parsed = createCommentSchema.safeParse(body);
+    if (!parsed.success) return errorResponse('Текст комментария обязателен', 422);
 
-  const [comment] = await db.insert(schema.comments).values({
-    text: parsed.data.text,
-    parentCommentId: parsed.data.parentCommentId || null,
-    authorId: user.userId,
-    designId: id,
-  }).returning();
+    const [comment] = await db.insert(schema.comments).values({
+      text: parsed.data.text,
+      parentCommentId: parsed.data.parentCommentId || null,
+      authorId: user.userId,
+      designId: id,
+    }).returning();
 
-  return successResponse(comment, 'Комментарий добавлен', 201);
+    return successResponse(comment, 'Комментарий добавлен', 201);
+  } catch (error) {
+    logger.error(error, 'POST /api/designs/[id]/comments error');
+    return errorResponse('Внутренняя ошибка сервера', 500);
+  }
 });

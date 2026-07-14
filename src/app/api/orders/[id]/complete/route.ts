@@ -8,8 +8,9 @@ import { sendNotification } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
 
 export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-  const user = (req as AuthenticatedRequest).user!;
-  if (user.role !== 'nailmaster') return errorResponse('Только мастера могут завершать заказы', 403);
+  try {
+    const user = (req as AuthenticatedRequest).user!;
+    if (user.role !== 'nailmaster') return errorResponse('Только мастера могут завершать заказы', 403);
 
   const { id } = await params;
   const orders = await db.select().from(schema.orders).where(eq(schema.orders.id, id)).limit(1);
@@ -54,5 +55,9 @@ export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promi
     sendNotification(order.clientId, { id: notif.id, type: 'order_completed', title: 'Заказ завершён', message: notif.message, createdAt: notif.createdAt }).catch(() => {});
   }
 
-  return successResponse(null, 'Заказ завершен');
+    return successResponse(null, 'Заказ завершен');
+  } catch (error) {
+    logger.error(error, 'PUT /api/orders/[id]/complete error');
+    return errorResponse('Внутренняя ошибка сервера', 500);
+  }
 });

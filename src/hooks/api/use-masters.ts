@@ -2,8 +2,8 @@
 // React Query хуки для мастеров
 // ============================================================
 
-import { useQuery } from '@tanstack/react-query';
-import { apiGet } from '@/lib/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { useAuth } from '@/components/providers/auth-provider';
 import type { Master, MasterProfile, Service, ScheduleSlot } from '@/lib/types';
 
@@ -101,5 +101,91 @@ export function useMyReviews() {
     queryKey: masterKeys.myReviews(),
     queryFn: () => apiGet<unknown[]>('/api/master-rating', { clientId }),
     enabled: !!clientId,
+  });
+}
+
+// ── Mutations ─────────────────────────────────────────────
+
+export function useCreateService() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      await ensureAuth();
+      return apiPost<unknown>('/api/masters/services', body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: masterKeys.services() });
+    },
+  });
+}
+
+export function useUpdateService() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: { id: string } & Record<string, unknown>) => {
+      await ensureAuth();
+      return apiPut<unknown>(`/api/masters/services/${id}`, body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: masterKeys.services() });
+    },
+  });
+}
+
+export function useDeleteService() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await ensureAuth();
+      return apiDelete<unknown>(`/api/masters/services/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: masterKeys.services() });
+    },
+  });
+}
+
+export function useBookSlot() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      await ensureAuth();
+      return apiPost<unknown>('/api/orders', body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: masterKeys.all });
+    },
+  });
+}
+
+export function useDeleteSlot() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async (slotId: string) => {
+      await ensureAuth();
+      return apiDelete<unknown>(`/api/masters/schedule/${slotId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: masterKeys.all });
+    },
+  });
+}
+
+export function useCreateReview() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      await ensureAuth();
+      return apiPost<unknown>('/api/master-rating', body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: masterKeys.all });
+    },
   });
 }

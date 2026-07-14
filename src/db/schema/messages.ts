@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, timestamp, jsonb, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { users } from './users';
 import { orders } from './orders';
@@ -13,9 +13,8 @@ export const messages = pgTable('messages', {
   receiverId: uuid('receiver_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   relatedOrderId: uuid('related_order_id').references(() => orders.id, { onDelete: 'set null' }),
   attachmentUrl: text('attachment_url'),
-  attachmentType: text('attachment_type'), // deprecated, use attachments instead
   attachments: jsonb('attachments').$type<{ url: string; type: string }[]>(),
-  replyToId: uuid('reply_to_id'),
+  replyToId: uuid('reply_to_id').references((): AnyPgColumn => messages.id, { onDelete: 'set null' }),
   replyToText: text('reply_to_text'),
   replyToSenderName: text('reply_to_sender_name'),
   isDeleted: boolean('is_deleted').default(false).notNull(),

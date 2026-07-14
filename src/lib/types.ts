@@ -385,7 +385,6 @@ export interface Message {
   receiverId: string;
   relatedOrderId?: string | null;
   attachmentUrl?: string | null;
-  attachmentType?: string | null;
   attachments?: MessageAttachment[] | null;
   replyToId?: string | null;
   replyToText?: string | null;

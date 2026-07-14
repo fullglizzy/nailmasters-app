@@ -41,7 +41,7 @@ export const updateProfileSchema = z.object({
 // ============================================================
 export const createDesignSchema = z.object({
   title: z.string().min(1, 'Название обязательно').max(255),
-  type: z.enum(['basic', 'designer']).optional().default('designer'),
+  type: z.enum(['basic', 'designer']).optional().default('basic'),
   description: z.string().max(5000).optional(),
   images: z.array(z.string()).optional().default([]),
   videoUrl: z.string().optional(),

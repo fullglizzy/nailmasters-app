@@ -21,7 +21,6 @@ RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/server.ts ./server.ts
 
 RUN mkdir -p public/uploads/avatars public/uploads/designs public/uploads/videos public/uploads/sterilization
 RUN chown -R nextjs:nodejs public/uploads
@@ -32,4 +31,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-CMD ["node", "server.js"]
+CMD ["node", "node_modules/.bin/next", "start", "--port", "3000"]

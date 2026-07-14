@@ -1,6 +1,13 @@
-import { pgTable, uuid, varchar, text, jsonb, integer, boolean, timestamp, decimal, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, jsonb, integer, boolean, timestamp, decimal, pgEnum, primaryKey, customType } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { users, clientProfiles, masterProfiles, adminProfiles } from './users';
+
+// Postgres tsvector — полнотекстовый поиск (заполняется триггером/миграцией)
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return 'tsvector';
+  },
+});
 
 // Enums
 export const designTypeEnum = pgEnum('design_type', ['basic', 'designer']);
@@ -43,6 +50,7 @@ export const nailDesigns = pgTable('nail_designs', {
   uploadedByClientId: uuid('uploaded_by_client_id').references(() => clientProfiles.userId, { onDelete: 'set null' }),
   uploadedByAdminId: uuid('uploaded_by_admin_id').references(() => adminProfiles.userId, { onDelete: 'set null' }),
   uploadedByMasterId: uuid('uploaded_by_master_id').references(() => masterProfiles.userId, { onDelete: 'set null' }),
+  searchVector: tsvector('search_vector'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull().$onUpdate(() => new Date()),
 });
@@ -67,7 +75,9 @@ export const masterDesigns = pgTable('master_designs', {
 export const clientLikedDesigns = pgTable('client_liked_designs', {
   clientId: uuid('client_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   nailDesignId: uuid('nail_design_id').notNull().references(() => nailDesigns.id, { onDelete: 'cascade' }),
-});
+}, (table) => ({
+  pk: primaryKey({ columns: [table.clientId, table.nailDesignId] }),
+}));
 
 // ============================================================
 // Relations

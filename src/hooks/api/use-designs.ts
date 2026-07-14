@@ -2,8 +2,8 @@
 // React Query хуки для дизайнов
 // ============================================================
 
-import { useQuery } from '@tanstack/react-query';
-import { apiGet } from '@/lib/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiGet, apiPost, apiDelete } from '@/lib/api';
 import { useAuth } from '@/components/providers/auth-provider';
 import type { Design, DesignDetail } from '@/lib/types';
 
@@ -98,5 +98,57 @@ export function useCanDo(designId: string | undefined) {
     queryKey: designKeys.canDo(designId!),
     queryFn: () => apiGet<{ canDo: boolean }>(`/api/masters/can-do/${designId}`),
     enabled: !!designId,
+  });
+}
+
+// ── Mutations ─────────────────────────────────────────────
+
+export function useLikeMutation() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async (designId: string) => {
+      await ensureAuth();
+      return apiPost<{ likesCount: number; liked: boolean }>(`/api/designs/${designId}/like`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: designKeys.all });
+    },
+  });
+}
+
+export function useCreateComment() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async ({
+      designId,
+      text,
+      parentCommentId,
+    }: {
+      designId: string;
+      text: string;
+      parentCommentId?: string;
+    }) => {
+      await ensureAuth();
+      return apiPost<unknown>(`/api/designs/${designId}/comments`, { text, parentCommentId });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: designKeys.comments(variables.designId) });
+    },
+  });
+}
+
+export function useDeleteComment() {
+  const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
+  return useMutation({
+    mutationFn: async (commentId: string) => {
+      await ensureAuth();
+      return apiDelete<unknown>(`/api/comments/${commentId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: designKeys.all });
+    },
   });
 }
