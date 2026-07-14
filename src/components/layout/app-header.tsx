@@ -9,7 +9,7 @@ import { NotificationBell } from '@/components/shared/notification-bell';
 
 export function AppHeader() {
   const pathname = usePathname();
-  const { token, role, isGuest } = useAuthState();
+  const { token, role } = useAuthState();
 
   const isAuthPage = pathname === '/auth';
   const isFeedPage = pathname.startsWith('/explore');
@@ -75,7 +75,7 @@ export function AppHeader() {
               )}
             </Link>
           )}*/}
-          {token && !isGuest && <NotificationBell />}
+          {token && <NotificationBell />}
           {token && (
             <Link
               href="/profile"

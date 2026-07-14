@@ -628,6 +628,34 @@ export default function TikTokFeedPage() {
 
                   {/* Bottom info */}
                   <div className="absolute bottom-0 left-0 right-[80px] p-5 pb-[60px] z-10 text-white">
+                    {/* Media indicator dots — above title, videos show play triangle */}
+                    {allMedia.length > 1 && (
+                      <div className="flex justify-center items-center gap-2 mb-3">
+                        {allMedia.map((m, i) =>
+                          m.type === 'video' ? (
+                            <button
+                              key={i}
+                              onClick={() => setMediaIdx((p) => ({ ...p, [design.id]: i }))}
+                              className={`transition-all flex items-center justify-center ${
+                                i === curMediaIdx ? 'opacity-100 scale-110' : 'opacity-50 hover:opacity-80'
+                              }`}
+                            >
+                              <svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor" className="text-white drop-shadow-sm">
+                                <path d="M0 0v12l10-6z" />
+                              </svg>
+                            </button>
+                          ) : (
+                            <button
+                              key={i}
+                              onClick={() => setMediaIdx((p) => ({ ...p, [design.id]: i }))}
+                              className={`rounded-full transition-all ${
+                                i === curMediaIdx ? 'w-5 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/50 hover:bg-white/80'
+                              }`}
+                            />
+                          )
+                        )}
+                      </div>
+                    )}
                     <h2 className="text-xl font-bold leading-tight mb-1.5">{design.title}</h2>
                     {design.description && (
                       <p className="text-xs leading-relaxed opacity-70 line-clamp-1 mb-2">{design.description}</p>
@@ -643,19 +671,6 @@ export default function TikTokFeedPage() {
                       </div>
                     )}
                   </div>
-
-                  {/* Media dots */}
-                  {allMedia.length > 1 && (
-                    <div className="flex absolute bottom-5 left-5 right-5 z-20 justify-center gap-2">
-                      {allMedia.map((_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setMediaIdx((p) => ({ ...p, [design.id]: i }))}
-                          className={`rounded-full transition-all ${i === curMediaIdx ? 'w-6 h-2 bg-white' : 'w-2 h-2 bg-white/50 hover:bg-white/80'}`}
-                        />
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

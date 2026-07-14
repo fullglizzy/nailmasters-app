@@ -62,6 +62,11 @@ export default function AuthPage() {
 
   /* ── Form state ─────────────────────────── */
 
+  // Явный вход → сбрасываем контекст букинга (пользователь хочет войти, а не записаться)
+  useEffect(() => {
+    if (isExplicitLogin) sessionStorage.removeItem('pending_booking');
+  }, [isExplicitLogin]);
+
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [countryCode, setCountryCode] = useState('+1');
@@ -78,7 +83,8 @@ export default function AuthPage() {
   /* ── Derived ────────────────────────────── */
 
   const fullPhone = `${countryCode}${phone.replace(/\D/g, '')}`;
-  const bookingCtx = registerAs === 'client' ? readPendingBooking() : null;
+  // Явный вход — букинг не показываем (пользователь хочет войти в аккаунт, а не записаться)
+  const bookingCtx = (!isExplicitLogin && registerAs === 'client') ? readPendingBooking() : null;
   const hasBookingContext = !!(bookingCtx?.description);
   const isBecomingMaster = registerAs === 'nailmaster';
 

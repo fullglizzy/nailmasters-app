@@ -13,7 +13,7 @@ import { useAuthState } from '@/components/providers/guest-provider';
  * - SSE keeps the count live (invalidates RQ when new notifs arrive).
  */
 export function NotificationBell() {
-  const { token, isGuest } = useAuthState();
+  const { token } = useAuthState();
   const { data: notifs = [] } = useNotifications();
   const queryClient = useQueryClient();
 
@@ -28,7 +28,7 @@ export function NotificationBell() {
     return () => es.close();
   }, [token, queryClient]);
 
-  if (!token || isGuest) return null;
+  if (!token) return null;
 
   const unread = notifs.filter((n) => !n.isRead).length;
 

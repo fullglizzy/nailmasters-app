@@ -231,43 +231,51 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
             <div className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
           )}
 
-          {/* Design selection */}
-          <div>
-            <h3 className="text-sm font-semibold mb-2">Дизайн</h3>
-            {designsLoading ? (
-              <div className="flex justify-center py-4">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : (designs as DesignItem[]).length === 0 ? (
-              <p className="text-sm text-muted-foreground">У мастера пока нет дизайнов</p>
-            ) : (
-              <>
-                {/* Search — only show when 6+ designs */}
-                {(designs as DesignItem[]).length >= 6 && (
-                  <div className="relative mb-2">
-                    <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                    <input
-                      value={designSearch}
-                      onChange={(e) => { setDesignSearch(e.target.value); setDesignsVisible(9); }}
-                      placeholder="Поиск по названию..."
-                      className="w-full rounded-lg border border-border/60 bg-background pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                  </div>
-                )}
-                <DesignsGrid
-                  designs={designs as DesignItem[]}
-                  search={designSearch}
-                  visible={designsVisible}
-                  selectedId={selectedDesign?.id}
-                  onSelect={(d) => { setSelectedDesign(d); setSelectedDate(''); setSelectedTime(''); }}
-                  onShowMore={() => setDesignsVisible((v) => v + 12)}
-                  showMoreCount={Math.max(0, (designs as DesignItem[]).filter((d) =>
-                    !designSearch || d.title.toLowerCase().includes(designSearch.toLowerCase())
-                  ).length - designsVisible)}
-                />
-              </>
-            )}
-          </div>
+          {/* Design selection grid — hidden when arriving with preselected design from TikTok */}
+          {!preselectedDesignId && (
+            <div>
+              <h3 className="text-sm font-semibold mb-2">Дизайн</h3>
+              {designsLoading ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (designs as DesignItem[]).length === 0 ? (
+                <p className="text-sm text-muted-foreground">У мастера пока нет дизайнов</p>
+              ) : (
+                <>
+                  {(designs as DesignItem[]).length >= 6 && (
+                    <div className="relative mb-2">
+                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      <input
+                        value={designSearch}
+                        onChange={(e) => { setDesignSearch(e.target.value); setDesignsVisible(9); }}
+                        placeholder="Поиск по названию..."
+                        className="w-full rounded-lg border border-border/60 bg-background pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  )}
+                  <DesignsGrid
+                    designs={designs as DesignItem[]}
+                    search={designSearch}
+                    visible={designsVisible}
+                    selectedId={selectedDesign?.id}
+                    onSelect={(d) => { setSelectedDesign(d); setSelectedDate(''); setSelectedTime(''); }}
+                    onShowMore={() => setDesignsVisible((v) => v + 12)}
+                    showMoreCount={Math.max(0, (designs as DesignItem[]).filter((d) =>
+                      !designSearch || d.title.toLowerCase().includes(designSearch.toLowerCase())
+                    ).length - designsVisible)}
+                  />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Loading — preselected design not found yet */}
+          {preselectedDesignId && !selectedDesign && designsLoading && (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
 
           {/* Selected design preview + details */}
           {selectedDesign && (

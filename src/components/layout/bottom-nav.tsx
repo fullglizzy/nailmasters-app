@@ -8,7 +8,7 @@ import { useNotifications } from '@/hooks/api';
 
 export function BottomNavigation() {
   const pathname = usePathname();
-  const { role, isGuest } = useAuthState();
+  const { role } = useAuthState();
   const { data: notifs = [] } = useNotifications();
   const unread = notifs.filter((n) => !n.isRead).length;
 
@@ -16,7 +16,7 @@ export function BottomNavigation() {
     { href: '/', icon: Home, label: 'Home' },
     { href: '/search', icon: Search, label: 'Search' },
     { href: '/create', icon: Plus, label: 'Create' },
-    ...(isGuest ? [] : [{ href: '/notifications', icon: Bell, label: 'Alerts' }]),
+    { href: '/notifications', icon: Bell, label: 'Alerts' },
     ...(role === 'admin' ? [{ href: '/admin', icon: Shield, label: 'Admin' }] : []),
     { href: '/profile', icon: User, label: 'Profile' },
   ];
