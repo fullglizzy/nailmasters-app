@@ -1,67 +1,60 @@
 import { NextRequest } from 'next/server';
 import { db, schema } from '@/lib/db';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and, gt, sql } from 'drizzle-orm';
 import { generateAccessToken, generateRefreshToken, setRefreshTokenCookie, extractToken, verifyAccessToken } from '@/lib/auth';
 import { successResponse, errorResponse } from '@/lib/response';
+import { withRateLimit } from '@/lib/api-middleware';
 import { logger } from '@/lib/logger';
 import { v4 as uuid } from 'uuid';
 
-// POST /api/auth/verify-code — подтвердить код (и запросить новый если нужно)
-export const POST = async (req: NextRequest) => {
-  const body = await req.json();
-  const phone = (body.phone || '').replace(/[\s()\-]/g, '');
-  const code = (body.code || '').trim();
-  const action = body.action || 'verify'; // 'send' | 'verify'
+const MAX_ATTEMPTS_PER_CODE = 5;
 
-  if (phone.length < 7) return errorResponse('Введите телефон', 422);
+// POST /api/auth/verify-code — подтвердить код (rate-limited, brute-force protected)
+export const POST = withRateLimit('auth')(async (req: NextRequest) => {
+  try {
+    const body = await req.json();
+    const phone = (body.phone || '').replace(/[\s()\-]/g, '');
+    const code = (body.code || '').trim();
 
-  // ── Действие: отправить код ──
-  if (action === 'send') {
-    // Проверяем, не запрашивали ли код недавно
-    const recent = await db
+    if (phone.length < 7) return errorResponse('Введите телефон', 422);
+    if (code.length < 4 || code.length > 10) return errorResponse('Введите код', 422);
+
+    // ── Находим валидный код ──
+    const validCode = await db
       .select()
       .from(schema.smsCodes)
       .where(and(
         eq(schema.smsCodes.phone, phone),
-        gt(schema.smsCodes.expiresAt, new Date()),
+        eq(schema.smsCodes.code, code),
         eq(schema.smsCodes.used, false),
+        gt(schema.smsCodes.expiresAt, new Date(Date.now() - 30_000)),
       ))
       .limit(1);
 
-    if (recent.length > 0) {
-      const remaining = Math.ceil((recent[0].createdAt.getTime() + 60000 - Date.now()) / 1000);
-      if (remaining > 0) return errorResponse(`Код уже отправлен. Повторите через ${remaining} сек`, 429);
+    // ── Считаем количество попыток на этот телефон за последние 5 минут ──
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const [attemptCount] = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(schema.smsCodes)
+      .where(and(eq(schema.smsCodes.phone, phone), gt(schema.smsCodes.createdAt, fiveMinAgo)));
+
+    const totalAttempts = (attemptCount?.count ?? 0) + 1;
+
+    // ── Блокировка при слишком многих попытках ──
+    if (totalAttempts > 20) {
+      logger.warn({ phone, attempts: totalAttempts }, 'Brute-force blocked');
+      return errorResponse('Слишком много попыток. Попробуйте позже.', 429);
     }
 
-    const smsCode = '000000';
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    const [saved] = await db.insert(schema.smsCodes).values({ phone, code: smsCode, expiresAt }).returning();
-    console.log(`[SMS] SENT code=${smsCode} to ${phone}, id=${saved?.id}`);
-    return successResponse({ phone, expiresIn: 300 }, 'Код отправлен');
-  }
+    if (!validCode.length) {
+      logger.warn({ phone, code }, 'Invalid verification code');
+      return errorResponse('Неверный или истекший код', 401);
+    }
 
-  // ── Действие: проверить код ──
-  if (code.length < 4) return errorResponse('Введите код', 422);
+    // Помечаем код использованным
+    await db.update(schema.smsCodes).set({ used: true }).where(eq(schema.smsCodes.id, validCode[0].id));
 
-  // Проверяем код (включая немного просроченные — запас 30 сек)
-  const validCode = await db
-    .select()
-    .from(schema.smsCodes)
-    .where(and(
-      eq(schema.smsCodes.phone, phone),
-      eq(schema.smsCodes.code, code),
-      eq(schema.smsCodes.used, false),
-      gt(schema.smsCodes.expiresAt, new Date(Date.now() - 30_000)),
-    ))
-    .orderBy(schema.smsCodes.createdAt)
-    .limit(1);
-
-  if (!validCode.length) {
-    console.log(`[SMS] VERIFY FAIL: phone=${phone}, code=${code} — not found or expired`);
-    return errorResponse('Неверный или истекший код', 401);
-  }
-
-  console.log(`[SMS] VERIFY OK: phone=${phone}`);
+    logger.info({ phone }, 'Code verified');
 
   // ── Ищем гостя по токену (если гость уже авторизован) ──
   const authHeader = req.headers.get('authorization');
@@ -165,4 +158,8 @@ export const POST = async (req: NextRequest) => {
     user: { id: user.id, phone: user.phone, username: user.username, role: user.role, isGuest: user.isGuest, fullName, avatar: user.avatarUrl },
     token, refreshToken, isNew,
   }, isNew ? 'Регистрация успешна' : 'Вход выполнен', isNew ? 201 : 200);
-};
+  } catch (error) {
+    logger.error(error, 'verify-code error');
+    return errorResponse('Внутренняя ошибка', 500);
+  }
+});
