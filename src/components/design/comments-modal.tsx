@@ -209,12 +209,12 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
   /* ── Send comment (stable callback) ─────────────────── */
   const sendComment = useCallback(async (body: { text: string; parentCommentId?: string }) => {
     if (!body.text.trim()) return false;
-    const token = await ensureAuth();
-    if (!token) { setShowAuthGuard(true); return false; }
+    const auth = await ensureAuth();
+    if (!auth) { setShowAuthGuard(true); return false; }
     try {
       const res = await fetch(`/api/designs/${designId}/comments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
         body: JSON.stringify(body),
       });
       const json = await res.json();
@@ -250,8 +250,8 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
 
   /* ── Like comment (optimistic, stable callback) ──────── */
   const handleLikeComment = useCallback(async (commentId: string) => {
-    const token = await ensureAuth();
-    if (!token) { setShowAuthGuard(true); return; }
+    const auth = await ensureAuth();
+    if (!auth) { setShowAuthGuard(true); return; }
 
     // Optimistic toggle
     const wasLiked = likedIds.has(commentId);
@@ -265,7 +265,7 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
     try {
       await fetch(`/api/comments/${commentId}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${auth.token}` },
       });
     } catch {
       // Revert

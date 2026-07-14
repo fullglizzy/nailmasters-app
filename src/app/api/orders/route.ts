@@ -102,7 +102,7 @@ export const POST = withAuth(async (req: NextRequest) => {
   try {
     const user = (req as AuthenticatedRequest).user!;
     if (user.role !== 'client') return errorResponse('Только клиенты могут создавать заказы', 403);
-    if (user.isGuest) return errorResponse('Гости не могут создавать заказы. Зарегистрируйтесь.', 403);
+    if (user.isGuest) return errorResponse('Подтвердите номер телефона для создания заказа.', 403);
 
     const body = await req.json();
     const parsed = createOrderSchema.safeParse(body);

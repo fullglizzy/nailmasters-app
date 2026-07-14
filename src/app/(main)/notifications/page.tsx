@@ -79,9 +79,11 @@ function groupByDate(notifs: Notification[]): Record<string, Notification[]> {
 export default function NotificationsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { getToken } = useAuth();
+  const { getToken, isLoading: authLoading } = useAuth();
   const { data: notifs = [], isLoading } = useNotifications();
   const [showRead, setShowRead] = useState(false);
+
+  if (authLoading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
 
   const markRead = async (id?: string) => {
     const token = getToken();

@@ -55,8 +55,8 @@ export function useLike({ designId, initialLikesCount, initialIsLiked }: UseLike
     justToggledRef.current = true;
 
     // Ленивое создание гостя: идентифицируем пользователя только при первом действии
-    const token = await ensureAuth();
-    if (!token) {
+    const auth = await ensureAuth();
+    if (!auth) {
       // No auth — revert
       setIsLiked(wasLiked);
       setLikesCount((prev) => prev + (wasLiked ? 1 : -1));
@@ -68,7 +68,7 @@ export function useLike({ designId, initialLikesCount, initialIsLiked }: UseLike
     try {
       const res = await fetch(`/api/designs/${designId}/like`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${auth.token}` },
       });
       const json = await res.json();
 

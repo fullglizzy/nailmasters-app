@@ -39,6 +39,7 @@ export interface UseDesignsParams {
   search?: string;
   sort?: 'likes' | 'newest' | 'popular';
   includeOwn?: boolean;
+  uploadedBy?: string;
 }
 
 export function useDesigns(params: UseDesignsParams = {}) {

@@ -5,6 +5,8 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Sparkles, Plus, X, Upload, Hash, Eye, Play } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
+import { captureVideoFrame } from '@/lib/video-thumbnail';
+import Link from 'next/link';
 
 /* ── Constants ──────────────────────────────────────────── */
 
@@ -27,7 +29,7 @@ const HUMAN_LABELS: Record<string, Record<string, string>> = { shapes: SHAPE_LAB
 
 /* ── Types ───────────────────────────────────────────────── */
 
-interface MediaItem { url: string; type: 'image' | 'video'; }
+interface MediaItem { url: string; type: 'image' | 'video'; thumbnail?: string | null; }
 
 /* ═════════════════════════════════════════════════════════
    Page
@@ -35,19 +37,24 @@ interface MediaItem { url: string; type: 'image' | 'video'; }
 
 export default function CreateDesignPage() {
   const router = useRouter();
-  const { getToken } = useAuth();
+  const { ensureAuth, isLoading: authLoading } = useAuth();
+
+  if (authLoading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
+
+  return <CreateDesignForm ensureAuth={ensureAuth} router={router} />;
+}
+
+function CreateDesignForm({ ensureAuth, router }: { ensureAuth: () => Promise<{ token: string; isGuest: boolean } | null>; router: ReturnType<typeof useRouter> }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [playingVideo, setPlayingVideo] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
   const [previewIdx, setPreviewIdx] = useState(0);
   const [rotations, setRotations] = useState<Record<number, number>>({});
   const videoRefs = useRef<Map<string, HTMLVideoElement | null>>(new Map());
-  const submittingRef = useRef(false);
 
   // Form fields
   const [title, setTitle] = useState('');
@@ -80,7 +87,9 @@ export default function CreateDesignPage() {
     setUploading(true);
     setError('');
 
-    const token = getToken();
+    const auth = await ensureAuth();
+    if (!auth) { setError('Не удалось создать сессию'); setUploading(false); return; }
+    const token = auth.token;
     try {
       const results: MediaItem[] = [];
 
@@ -89,7 +98,7 @@ export default function CreateDesignPage() {
         imageFiles.forEach((f) => fd.append('images', f));
         const res = await fetch('/api/designs/upload-images', {
           method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: { Authorization: `Bearer ${token}` },
           body: fd,
         });
         const json = await res.json();
@@ -109,7 +118,7 @@ export default function CreateDesignPage() {
         fd.append('video', vf);
         const res = await fetch('/api/designs/upload-video', {
           method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: { Authorization: `Bearer ${token}` },
           body: fd,
         });
         const json = await res.json();
@@ -122,6 +131,12 @@ export default function CreateDesignPage() {
         setMedia((prev) => [...prev, ...results]);
         setPreviewMode(true);
         setPreviewIdx(0);
+        // Генерируем thumbnail для каждого добавленного видео асинхронно
+        results.filter(r => r.type === 'video').forEach(r => {
+          captureVideoFrame(r.url).then(thumb => {
+            if (thumb) setMedia(prev => prev.map(m => m.url === r.url ? { ...m, thumbnail: thumb } : m));
+          });
+        });
       }
     } catch {
       setError('Ошибка соединения');
@@ -129,7 +144,7 @@ export default function CreateDesignPage() {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
-  }, [getToken]);
+  }, [ensureAuth]);
 
   /* ── Tags ────────────────────────────────────────────── */
 
@@ -161,18 +176,17 @@ export default function CreateDesignPage() {
       img.crossOrigin = 'anonymous';
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d')!;
-        // Swap dimensions for 90° / 270° rotations
         const swap = degrees % 180 !== 0;
         canvas.width = swap ? img.naturalHeight : img.naturalWidth;
         canvas.height = swap ? img.naturalWidth : img.naturalHeight;
+        const ctx = canvas.getContext('2d')!;
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate((degrees * Math.PI) / 180);
         ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
         canvas.toBlob((blob) => {
           if (blob) resolve(blob);
           else reject(new Error('Canvas toBlob failed'));
-        }, 'image/jpeg', 0.9);
+        }, 'image/jpeg', 0.92);
       };
       img.onerror = reject;
       img.src = url;
@@ -184,42 +198,47 @@ export default function CreateDesignPage() {
   const canSubmit = media.length > 0 && title.trim().length >= 3;
 
   const handleSubmit = async () => {
-    if (submittingRef.current) return;
+    if (submitting) return;
     if (!canSubmit) {
       setError('Добавьте хотя бы одно фото и название (от 3 символов)');
       return;
     }
-    submittingRef.current = true;
     setSubmitting(true);
     setError('');
 
-    const token = getToken();
+    const auth = await ensureAuth();
+    if (!auth) {
+      setError('Не удалось создать сессию. Проверьте соединение.');
+      setSubmitting(false);
+      return;
+    }
+    const token = auth.token;
     try {
-      // Rotate images that need rotation, upload rotated versions
+      // Rotate + upload images that need rotation (parallel)
       const rotatedUrls: Record<number, string> = {};
       const rotationEntries = Object.entries(rotations).filter(([, deg]) => deg !== 0 && deg !== 360);
 
       if (rotationEntries.length > 0) {
         setError('Обработка повёрнутых фото...');
-        for (const [idxStr, deg] of rotationEntries) {
+        await Promise.all(rotationEntries.map(async ([idxStr, deg]) => {
           const idx = parseInt(idxStr);
           const item = media[idx];
-          if (!item || item.type !== 'image') continue;
+          if (!item || item.type !== 'image') return;
           try {
-            const blob = await rotateImage(item.url, deg);
+            const blob = await rotateImage(item.url, deg as number);
             const fd = new FormData();
             fd.append('images', blob, `rotated_${idx}.jpg`);
             const uploadRes = await fetch('/api/designs/upload-images', {
               method: 'POST',
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
+              headers: { Authorization: `Bearer ${token}` },
               body: fd,
             });
             const uploadJson = await uploadRes.json();
             if (uploadJson.success && uploadJson.data.files?.[0]) {
               rotatedUrls[idx] = uploadJson.data.files[0].url;
             }
-          } catch { /* skip failed rotations, use original */ }
-        }
+          } catch { /* skip failed rotation, use original */ }
+        }));
         setError('');
       }
 
@@ -252,12 +271,10 @@ export default function CreateDesignPage() {
         router.push(`/explore/${json.data.id}`);
       } else {
         setError(json.error || 'Ошибка создания');
-        submittingRef.current = false;
         setSubmitting(false);
       }
     } catch {
       setError('Ошибка соединения');
-      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -425,67 +442,37 @@ export default function CreateDesignPage() {
               {media.map((item, i) => (
                 <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-muted ring-1 ring-border/20 group">
                   {item.type === 'video' ? (
-                    <>
-                      <video
-                        ref={(el) => { videoRefs.current.set(item.url, el); }}
-                        src={item.url}
-                        className="h-full w-full object-cover cursor-pointer bg-black"
-                        muted
-                        loop
-                        playsInline
-                        preload="metadata"
-                        onLoadedMetadata={(e) => {
-                          const v = e.currentTarget;
-                          v.currentTime = 0;
-                          v.play().then(() => v.pause()).catch(() => {});
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const v = videoRefs.current.get(item.url);
-                          if (!v) return;
-                          if (v.paused) {
-                            // Pause any other playing video
-                            videoRefs.current.forEach((other, key) => {
-                              if (key !== item.url && other) { other.pause(); other.currentTime = 0; }
-                            });
-                            v.play().catch(() => {});
-                            setPlayingVideo(item.url);
-                          } else {
-                            v.pause();
-                            setPlayingVideo(null);
-                          }
-                        }}
-                      />
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const v = videoRefs.current.get(item.url);
-                          if (!v) return;
-                          if (v.paused) {
-                            videoRefs.current.forEach((other, key) => {
-                              if (key !== item.url && other) { other.pause(); other.currentTime = 0; }
-                            });
-                            v.play().catch(() => {});
-                            setPlayingVideo(item.url);
-                          } else {
-                            v.pause();
-                            setPlayingVideo(null);
-                          }
-                        }}
-                        className={`absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity ${playingVideo === item.url ? 'opacity-0 hover:opacity-100' : 'opacity-100'}`}
-                      >
+                    <button
+                      onClick={() => { setPreviewIdx(i); setPreviewMode(true); }}
+                      className="relative w-full h-full bg-black cursor-pointer"
+                    >
+                      {item.thumbnail ? (
+                        <img src={item.thumbnail} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <video
+                          ref={(el) => { videoRefs.current.set(item.url, el); }}
+                          src={item.url}
+                          className="h-full w-full object-cover"
+                          muted preload="metadata" playsInline
+                          onLoadedMetadata={(e) => {
+                            e.currentTarget.currentTime = 0;
+                          }}
+                        />
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/10">
                         <div className="rounded-full bg-black/60 p-2">
-                          {playingVideo === item.url ? (
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-white">
-                              <rect x="6" y="4" width="4" height="16" rx="1" />
-                              <rect x="14" y="4" width="4" height="16" rx="1" />
-                            </svg>
-                          ) : (
-                            <Play className="h-5 w-5 text-white fill-white" />
-                          )}
+                          <Play className="h-5 w-5 text-white" fill="white" />
                         </div>
-                      </button>
-                    </>
+                      </div>
+                      <span
+                        onClick={(e) => { e.stopPropagation(); setMedia(prev => prev.filter((_, j) => j !== i)); }}
+                        className="absolute top-1.5 right-1.5 rounded-full bg-black/60 p-1 text-white/70 hover:text-white hover:bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity z-10 cursor-pointer"
+                        role="button"
+                        aria-label="Удалить"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </span>
+                    </button>
                   ) : (
                     <Image
                       src={item.url}

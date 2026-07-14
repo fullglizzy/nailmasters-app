@@ -18,9 +18,10 @@ interface DesignCardProps {
   rank?: number;
   href?: string;
   delay?: number;
+  priority?: boolean;
 }
 
-export function DesignCard({ design, isLiked: isLikedProp, rank, href, delay }: DesignCardProps) {
+export function DesignCard({ design, isLiked: isLikedProp, rank, href, delay, priority }: DesignCardProps) {
   const { isLiked, likesCount, handleLike, isLoading } = useLike({
     designId: design.id,
     initialLikesCount: design.likesCount || 0,
@@ -63,6 +64,7 @@ export function DesignCard({ design, isLiked: isLikedProp, rank, href, delay }: 
             fill
             sizes="(max-width: 768px) 50vw, 25vw"
             className="object-cover transition-transform duration-500 group-hover:scale-105"
+            priority={priority}
           />
         ) : hasVideo ? (
           <video

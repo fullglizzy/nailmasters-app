@@ -1,6 +1,3 @@
-'use client';
-
-import { useState } from 'react';
 import Link from 'next/link';
 import { Sparkles, User, Users, Shield, Star, ExternalLink, Clipboard, Zap } from 'lucide-react';
 

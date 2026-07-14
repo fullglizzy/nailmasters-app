@@ -371,7 +371,32 @@ export default function AuthPage() {
       // Новый пользователь → шаг с именем и возрастом
       setStep('name');
     } else {
-      // Вернувшийся → сразу в приложение
+      // Вернувшийся пользователь (в т.ч. гость → клиент после подтверждения телефона)
+      // Если был отложенный букинг — создаём заказ
+      const ctx = readPendingBooking();
+      if (ctx && registerAs === 'client') {
+        try {
+          const bookingRes = await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${json.data.token}` },
+            body: JSON.stringify({
+              nailDesignId: ctx.nailDesignId,
+              nailMasterId: ctx.nailMasterId,
+              requestedDateTime: ctx.requestedDateTime,
+              clientNotes: ctx.clientNotes,
+              description: ctx.description,
+              price: ctx.price,
+            }),
+          });
+          if (bookingRes.ok) {
+            sessionStorage.removeItem('pending_booking');
+            sessionStorage.setItem('just_booked', '1');
+            router.push('/profile?tab=orders');
+            return;
+          }
+        } catch { /* заказ не создался — но профиль уже готов */ }
+      }
+
       if (window.history.length > 1) router.back();
       else router.push('/');
     }

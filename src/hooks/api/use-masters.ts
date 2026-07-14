@@ -98,8 +98,8 @@ export function useMyReviews() {
   const { user } = useAuth();
   const clientId = user?.id || '';
   return useQuery({
-    queryKey: masterKeys.myReviews(),
-    queryFn: () => apiGet<unknown[]>('/api/master-rating', { clientId }),
+    queryKey: [...masterKeys.myReviews(), clientId],
+    queryFn: () => clientId ? apiGet<unknown[]>('/api/master-rating', { clientId }) : Promise.resolve([]),
     enabled: !!clientId,
   });
 }

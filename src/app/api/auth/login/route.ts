@@ -30,7 +30,7 @@ export const POST = withRateLimit('auth')(async (req: NextRequest) => {
     if (!user) return errorResponse('Неверный телефон или пароль', 401);
     if (user.blocked) return errorResponse('Аккаунт заблокирован', 403);
 
-    const validPassword = await verifyPassword(password, user.password);
+    const validPassword = await verifyPassword(password, user.password ?? '');
     if (!validPassword) return errorResponse('Неверный телефон или пароль', 401);
 
     // Получаем профильные данные

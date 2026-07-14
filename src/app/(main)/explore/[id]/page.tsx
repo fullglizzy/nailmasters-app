@@ -29,7 +29,7 @@ function getAllMedia(design: FeedDesign): { type: 'video' | 'image'; url: string
 
 /** Returns the lowest price among masters offering this design, if known. */
 function getMinPrice(design: FeedDesign): number | null {
-  const raw = (design as Record<string, unknown>)._minPrice || (design as Record<string, unknown>)._masterPrice;
+  const raw = (design as unknown as Record<string, unknown>)._minPrice || (design as unknown as Record<string, unknown>)._masterPrice;
   if (!raw) return null;
   const n = parseInt(String(raw));
   return n > 0 ? n : null;

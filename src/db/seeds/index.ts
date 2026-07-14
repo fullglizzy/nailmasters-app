@@ -1,5 +1,5 @@
 import { db, schema } from '@/lib/db';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 async function seed() {
   console.log('🌱 Seeding database...\n');
@@ -70,6 +70,10 @@ async function seed() {
         latitude: m.latitude, longitude: m.longitude,
       }).onConflictDoNothing();
       console.log(`💅 Master: ${m.fullName} — ${m.phone} (${m.city})`);
+    } else {
+      // Already exists — fetch existing user
+      const [existing] = await db.select().from(schema.users).where(eq(schema.users.phone, m.phone)).limit(1);
+      if (existing) masterUsers.push(existing);
     }
   }
 
@@ -93,6 +97,10 @@ async function seed() {
         latitude: c.latitude, longitude: c.longitude,
       }).onConflictDoNothing();
       console.log(`👤 Client: ${c.fullName} — ${c.phone}`);
+    } else {
+      // Already exists — fetch existing user
+      const [existing] = await db.select().from(schema.users).where(eq(schema.users.phone, c.phone)).limit(1);
+      if (existing) clientUsers.push(existing);
     }
   }
 
@@ -181,7 +189,7 @@ async function seed() {
       season: d.season, moodTags: d.moodTags, materials: d.materials,
       durationMinutes: 60 + Math.floor(Math.random() * 60),
       isModerated: true,
-      likesCount: Math.floor(Math.random() * 200) + 10,
+      likesCount: 0,  // будет пересчитано после вставки реальных лайков
       ordersCount: Math.floor(Math.random() * 30),
       uploadedByMasterId: master?.id,
       createdAt: new Date(Date.now() - Math.floor(Math.random() * 30 * 24 * 3600 * 1000)),
@@ -362,6 +370,17 @@ async function seed() {
     }
   }
   console.log(`❤️ ${likesCreated} design likes`);
+
+  // Пересчитываем likesCount на основе реальных лайков в junction-таблице
+  for (const design of createdDesigns) {
+    const [result] = await db.select({ count: sql`COUNT(*)::int` })
+      .from(schema.clientLikedDesigns)
+      .where(eq(schema.clientLikedDesigns.nailDesignId, design.id));
+    await db.update(schema.nailDesigns)
+      .set({ likesCount: sql`${result?.count ?? 0}` })
+      .where(eq(schema.nailDesigns.id, design.id));
+  }
+  console.log(`🔢 likesCount пересчитан для ${createdDesigns.length} дизайнов`);
 
   // ═══════════════════════════════════════════════════════
   // 9. COMMENTS + COMMENT LIKES

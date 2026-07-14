@@ -92,6 +92,7 @@ export default function HomePage() {
                 design={d}
                 isLiked={likedIds.has(d.id)}
                 delay={Math.min(i * 40, 600)}
+                priority={i < 4}
               />
             ))}
           </div>

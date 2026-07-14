@@ -52,11 +52,17 @@ export function BookingsTab() {
     if (!token) return;
     setActingId(orderId);
     try {
-      await fetch(`/api/orders/${orderId}/${action}`, {
+      const res = await fetch(`/api/orders/${orderId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: body ? JSON.stringify(body) : undefined,
       });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        console.error(`Order action ${action} failed:`, json.error || res.statusText);
+      }
+    } catch (err) {
+      console.error(`Order action ${action} network error:`, err);
     } finally {
       refetch();
       setActingId(null);

@@ -41,7 +41,7 @@ export async function saveUploadedFile(
   originalName: string,
   category: 'designs' | 'videos' | 'avatars' | 'sterilization',
 ): Promise<UploadResult> {
-  const ext = originalName.split('.').pop()?.toLowerCase() || 'bin';
+  const ext = originalName.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
   const filename = `${category}_${Date.now()}_${nanoid(8)}.${ext}`;
   const dir = join(process.cwd(), UPLOAD_DIR, category);
 

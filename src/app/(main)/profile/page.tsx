@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -24,7 +24,7 @@ function ProfileContent() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { getToken, logout, refresh } = useAuth();
+  const { getToken, logout, refresh, ensureAuth, isLoading: authLoading } = useAuth();
 
   // Tab state — internal for instant switching, URL param for initial load / shareability
   const [tab, setTab] = useState(() => searchParams.get('tab') || 'overview');
@@ -33,9 +33,19 @@ function ProfileContent() {
 
   const handleLogout = () => logout();
 
-  if (isLoading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
+  // Лениво создаём гостя при первом заходе в профиль без сессии.
+  // Только один раз, только после того как syncSession подтвердил отсутствие сессии.
+  const profileEnsured = useRef(false);
+  useEffect(() => {
+    if (authLoading || profileEnsured.current) return;
+    if (profile !== undefined) return; // уже есть профиль
+    // useProfile завершился (enabled=false → data=undefined), сессии нет → создаём гостя
+    profileEnsured.current = true;
+    ensureAuth().then((r) => { if (r) refetch(); });
+  }, [authLoading, profile, ensureAuth, refetch]);
+
+  if (isLoading || authLoading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
   if (!profile) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
-  //<div className="flex min-h-screen flex-col items-center justify-center"><h1 className="font-display text-2xl mb-2">Необходима авторизация</h1><Link href="/auth" className="text-primary hover:underline font-medium">Войти</Link></div>;
 
   const isMaster = profile.role === 'nailmaster';
   const isClient = profile.role === 'client';
@@ -90,7 +100,7 @@ function ProfileContent() {
                 </div>
               ) : (
                 <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-primary/[0.06] ring-2 ring-primary/[0.08]">
-                  <span className="font-display text-3xl text-primary">{(profile.fullName || profile.username).charAt(0).toUpperCase()}</span>
+                  <span className="font-display text-3xl text-primary">{(profile.fullName || profile.username || '').charAt(0).toUpperCase()}</span>
                 </div>
                 
               )}
@@ -334,27 +344,29 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
   const [newDate, setNewDate] = useState('');
   const [newStart, setNewStart] = useState('09:00');
   const [newEnd, setNewEnd] = useState('10:00');
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const load = () => {
+  useEffect(() => {
     const token = getToken();
-    fetch('/api/masters/schedule', { headers: { Authorization: `Bearer ${token!}` } })
+    if (!token) { setLoading(false); return; }
+    setLoading(true);
+    fetch('/api/masters/schedule', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then(j => { if (j.success) setSlots(j.data); })
       .finally(() => setLoading(false));
-  };
-  useEffect(load, []);
+  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAdd = async () => {
     if (!newDate) return;
     await onAdd?.(newDate, newStart, newEnd);
     setNewDate('');
     setShowAdd(false);
-    load();
+    setRefreshKey(k => k + 1);
   };
 
   const handleDelete = async (id: string) => {
     setDeletingId(null);
     await onDelete?.(id);
-    load();
+    setRefreshKey(k => k + 1);
   };
 
   // Generate next 14 dates for quick pick

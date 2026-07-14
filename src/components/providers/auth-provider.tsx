@@ -28,8 +28,10 @@ export interface AuthContextValue {
   /**
    * Гарантирует идентификацию перед действием (лайк, комментарий, бронь).
    * Если токен есть — возвращает его; иначе лениво создаёт гостя.
+   * Возвращает { token, isGuest } чтобы вызывающий код мог сразу узнать статус
+   * (не дожидаясь ререндера контекста).
    */
-  ensureAuth: () => Promise<string | null>;
+  ensureAuth: () => Promise<{ token: string; isGuest: boolean } | null>;
   /** Перечитывает сессию с сервера (после изменения профиля и т.п.). */
   refresh: () => Promise<void>;
 }
@@ -82,35 +84,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const ensureAuth = useCallback(async (): Promise<string | null> => {
-    if (tokenRef.current) return tokenRef.current;
+  const ensureAuth = useCallback(async (): Promise<{ token: string; isGuest: boolean } | null> => {
+    if (tokenRef.current) return { token: tokenRef.current, isGuest: user?.isGuest ?? false };
     try {
-      const res = await fetch('/api/auth/register-guest', { method: 'POST' });
+      const res = await fetch('/api/auth/register-guest', { method: 'POST', credentials: 'include' });
       const json = await res.json();
       if (json.success && json.data?.token) {
         login({ token: json.data.token, refreshToken: json.data.refreshToken, user: json.data.user });
-        return json.data.token;
+        return { token: json.data.token, isGuest: json.data.user?.isGuest ?? true };
       }
     } catch {
       // сеть недоступна — вернём null, вызывающий код откатит оптимистичный UI
     }
     return null;
-  }, [login]);
+  }, [login, user?.isGuest]);
 
-  // Читает существующую сессию с сервера (без создания гостя)
+  // Читает существующую сессию с сервера (без создания гостя).
+  // Если у нас уже есть токен — передаём его в Authorization для быстрой верификации.
+  // НЕ сбрасываем существующий auth при ошибке/отсутствии сессии —
+  // только подтверждаем или обновляем.
   const syncSession = useCallback(async (): Promise<void> => {
     try {
-      const res = await fetch('/api/auth/session');
+      const headers: Record<string, string> = {};
+      if (tokenRef.current) headers['Authorization'] = `Bearer ${tokenRef.current}`;
+      const res = await fetch('/api/auth/session', { headers, credentials: 'include' });
       const json = await res.json();
       if (json.success && json.data?.user) {
         tokenRef.current = json.data.token ?? tokenRef.current;
         setUser(json.data.user);
-      } else {
-        tokenRef.current = null;
-        setUser(null);
       }
+      // Если сервер не подтвердил сессию — сохраняем текущее состояние.
+      // Не обнуляем: возможно cookie ещё не доехал, или сеть моргнула.
     } catch {
-      // нет сессии — остаёмся анонимными
+      // сеть недоступна — остаёмся с текущим состоянием
     }
   }, []);
 

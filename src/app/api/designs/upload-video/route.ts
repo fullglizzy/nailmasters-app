@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { successResponse, errorResponse } from '@/lib/response';
-import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
+import { withAuth, withRateLimit, type AuthenticatedRequest } from '@/lib/api-middleware';
 import { saveUploadedFile, validateVideoUpload } from '@/lib/upload';
 
-export const POST = withAuth(async (req: NextRequest) => {
+export const POST = withAuth(withRateLimit('upload')(async (req: NextRequest) => {
   try {
     const formData = await req.formData();
     const file = formData.get('video') as File | null;
@@ -18,4 +18,4 @@ export const POST = withAuth(async (req: NextRequest) => {
   } catch {
     return errorResponse('Ошибка загрузки видео', 500);
   }
-});
+}));

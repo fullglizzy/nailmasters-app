@@ -8,15 +8,10 @@ import { useAuth } from '@/components/providers/auth-provider';
 import type { Design } from '@/lib/types';
 
 export function UploadsTab() {
-  const { data: allDesigns = [], isLoading } = useDesigns({ includeOwn: true, limit: 100 });
-  const likedIds = useLikedIds();
   const { user } = useAuth();
-
   const userId = user?.id || '';
-
-  const designs = (allDesigns || []).filter((d: Design) =>
-    d.uploadedByClientId === userId || d.uploadedByMasterId === userId
-  );
+  const { data: designs = [], isLoading } = useDesigns({ uploadedBy: userId, limit: 50 });
+  const likedIds = useLikedIds();
 
   if (isLoading) return <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
   if (!designs.length) return (

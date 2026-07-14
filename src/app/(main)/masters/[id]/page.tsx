@@ -110,8 +110,8 @@ export default function MasterProfilePage() {
           label={formatDisplayAddress(master.address, master.city) || undefined}
         >
           <DistanceBadge
-            masterLat={master.latitude}
-            masterLon={master.longitude}
+            masterLat={Number(master.latitude) || undefined}
+            masterLon={Number(master.longitude) || undefined}
             clientLat={clientCoords?.latitude}
             clientLon={clientCoords?.longitude}
           />
@@ -269,7 +269,7 @@ export default function MasterProfilePage() {
           <BookingModal
             masterId={id}
             masterName={master.fullName}
-            masterInfo={{ fullName: master.fullName, rating: master.rating, city: master.city, reviewsCount: master.reviewsCount }}
+            masterInfo={{ fullName: master.fullName, rating: String(master.rating ?? ''), city: master.city, reviewsCount: master.reviewsCount }}
             onClose={() => { setShowBooking(false); setPreselectedDesignId(undefined); }}
             preselectedDesignId={preselectedDesignId}
           />

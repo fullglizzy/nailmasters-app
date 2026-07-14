@@ -4,7 +4,7 @@ import { X, Clock, Palette, Scissors, Tag, Calendar, Sparkles, Gem, Heart, Shopp
 import Image from 'next/image';
 import type { FeedDesign } from '@/lib/types';
 
-interface Props { design: FeedDesign; open: boolean; onClose: () => void; }
+interface Props { design: FeedDesign | { id: string; title: string; images: string[]; description?: string | null; likesCount?: number; color?: string | null; length?: string | null; season?: string | null; shape?: string | null; tags?: string[]; techniques?: string[]; materials?: string[]; decorTags?: string[]; moodTags?: string[]; source?: string | null; type?: string | null; durationMinutes?: number | null; videoUrl?: string | null; }; open: boolean; onClose: () => void; }
 
 const SHAPE_LABELS: Record<string, string> = {
   square: 'Квадрат', soft_square: 'Мягкий квадрат', almond: 'Миндаль',

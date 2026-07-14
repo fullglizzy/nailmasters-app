@@ -46,6 +46,17 @@ export const GET = withOptionalAuth(async (req: NextRequest) => {
 
     const conditions = [eq(schema.nailDesigns.isActive, true)];
 
+    // Фильтр по загрузившему пользователю (для вкладки «Загрузки» в ЛК)
+    const uploadedBy = url.searchParams.get('uploadedBy');
+    if (uploadedBy) {
+      conditions.push(
+        or(
+          eq(schema.nailDesigns.uploadedByClientId, uploadedBy),
+          eq(schema.nailDesigns.uploadedByMasterId, uploadedBy),
+        )!,
+      );
+    }
+
     // Модерированные или свои
     if (!includeOwn) {
       conditions.push(eq(schema.nailDesigns.isModerated, true));

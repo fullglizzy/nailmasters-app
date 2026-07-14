@@ -18,22 +18,39 @@ export function NotificationBell() {
   const { data: notifs = [] } = useNotifications();
   const queryClient = useQueryClient();
 
-  // SSE — live notification count globally
+  // SSE — live notification count globally (only when authenticated + tab visible)
   useEffect(() => {
     if (!isAuthenticated) return;
-    const token = getToken();
-    if (!token) return;
-    const es = new EventSource(`/api/notifications/stream?token=${encodeURIComponent(token)}`);
-    es.onmessage = () => {
-      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
-    };
-    es.onerror = (event) => {
-      logger.error(event, 'NotificationBell SSE error');
-    };
-    return () => es.close();
-  }, [isAuthenticated, getToken, queryClient]);
+    let es: EventSource | null = null;
+    let visibilityTimer: ReturnType<typeof setInterval> | null = null;
 
-  if (!isAuthenticated) return null;
+    const connect = () => {
+      const token = getToken();
+      if (!token) return;
+      es = new EventSource(`/api/notifications/stream?token=${encodeURIComponent(token)}`);
+      es.onmessage = () => {
+        queryClient.invalidateQueries({ queryKey: notificationKeys.all });
+      };
+      es.onerror = (event) => {
+        logger.error(event, 'NotificationBell SSE error');
+      };
+    };
+
+    const disconnect = () => { es?.close(); es = null; };
+
+    const onVisibility = () => {
+      if (document.hidden) { disconnect(); if (visibilityTimer) clearInterval(visibilityTimer); }
+      else { connect(); }
+    };
+
+    connect();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      disconnect();
+      if (visibilityTimer) clearInterval(visibilityTimer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isAuthenticated, getToken, queryClient]);
 
   const unread = notifs.filter((n) => !n.isRead).length;
 

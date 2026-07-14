@@ -11,6 +11,8 @@ import {
 } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/auth/session
 // Возвращает профиль текущего пользователя или { user: null }.
 // НЕ создаёт гостя — только читает существующую сессию.

@@ -12,15 +12,14 @@ export const POST = withAuth(async (req: NextRequest) => {
     if (!files.length) return errorResponse('Файлы не предоставлены', 400);
     if (files.length > 10) return errorResponse('Максимум 10 файлов', 400);
 
-    const results = [];
-    for (const file of files) {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const validationError = validateImageUpload(buffer, file.type, 10);
-      if (validationError) return errorResponse(validationError, 422);
-
-      const result = await saveOptimizedImage(buffer, file.name, 'designs');
-      results.push(result);
-    }
+    const results = await Promise.all(
+      files.map(async (file) => {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const validationError = validateImageUpload(buffer, file.type, 10);
+        if (validationError) throw new Error(validationError);
+        return saveOptimizedImage(buffer, file.name, 'designs');
+      })
+    );
 
     return successResponse({ files: results }, `Загружено файлов: ${results.length}`, 201);
   } catch {

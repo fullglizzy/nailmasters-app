@@ -54,7 +54,7 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const addressInputRef = useRef<HTMLInputElement>(null);
-  const suggestTimer = useRef<ReturnType<typeof setTimeout>>();
+  const suggestTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const suggestSeqRef = useRef(0); // race-condition guard
 
   const initialLocation = useRef('');

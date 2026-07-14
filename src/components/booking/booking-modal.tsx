@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { X, Clock, Loader2, Sparkles, ArrowRight, Search } from 'lucide-react';
+import { X, Clock, Loader2, Sparkles, Search } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { useMasterDesigns, useAvailableSlots } from '@/hooks/api';
 import { DesignDetailsModal } from '@/components/design/design-details-modal';
@@ -38,9 +38,16 @@ function slotDates(slots: { workDate?: string; date?: string }[]): string[] {
   return [...new Set(slots.map((s) => s.workDate || s.date || ''))].filter(Boolean).sort();
 }
 
-function slotTimes(slots: { workDate?: string; date?: string; startTime?: string }[], date: string): string[] {
+function slotTimes(slots: { workDate?: string; date?: string; startTime?: string; endTime?: string }[], date: string, minDurationMinutes?: number): string[] {
   return slots
     .filter((s) => (s.workDate || s.date) === date)
+    .filter((s) => {
+      if (!minDurationMinutes || !s.startTime || !s.endTime) return true;
+      const startParts = s.startTime.split(':').map(Number);
+      const endParts = s.endTime.split(':').map(Number);
+      const slotDuration = (endParts[0] * 60 + endParts[1]) - (startParts[0] * 60 + startParts[1]);
+      return slotDuration >= minDurationMinutes;
+    })
     .map((s) => (s.startTime || '').slice(0, 5))
     .filter(Boolean)
     .sort();
@@ -60,7 +67,7 @@ function formatDateLabel(d: string): { weekday: string; label: string; isToday: 
 
 export function BookingModal({ masterId, masterName, masterInfo, onClose, preselectedDesignId }: BookingModalProps) {
   const router = useRouter();
-  const { isGuest, isAuthenticated, getToken } = useAuth();
+  const { ensureAuth } = useAuth();
 
   const { data: designs = [], isLoading: designsLoading } = useMasterDesigns(masterId);
   const { data: availableSlots = [], isLoading: slotsLoading } = useAvailableSlots(masterId);
@@ -75,6 +82,7 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
   const [previewDesign, setPreviewDesign] = useState<DesignItem | null>(null);
   const [designSearch, setDesignSearch] = useState('');
   const [designsVisible, setDesignsVisible] = useState(9);
+  const [redirecting, setRedirecting] = useState(false);
 
   // Refs for auto-scrolling to new sections on mobile
   const dateRef = useRef<HTMLDivElement>(null);
@@ -115,9 +123,9 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
   useEffect(() => { if (selectedTime) scrollToRef(notesRef); }, [selectedTime]);
 
   const dates = slotDates(availableSlots);
-  const timesForDate = selectedDate ? slotTimes(availableSlots, selectedDate) : [];
   const duration = selectedDesign?._masterDuration ? parseInt(String(selectedDesign._masterDuration)) : 0;
   const price = selectedDesign?._masterPrice ? parseInt(String(selectedDesign._masterPrice)) : 0;
+  const timesForDate = selectedDate ? slotTimes(availableSlots, selectedDate, duration || undefined) : [];
   const city = masterInfo?.city || '';
 
   /* ── Book ──────────────────────────────────────────── */
@@ -128,8 +136,13 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
       return;
     }
 
-    // Guest → save full context for auth page, redirect
-    if (!isAuthenticated || isGuest) {
+    // 1. Идентифицируем пользователя (ленивый гость если нужно)
+    const auth = await ensureAuth();
+    if (!auth) { setError('Ошибка соединения'); return; }
+    const { token, isGuest: guestNow } = auth;
+
+    // 2. Гость → сохраняем полный контекст и редиректим на подтверждение телефона
+    if (guestNow) {
       sessionStorage.setItem('pending_booking', JSON.stringify({
         nailDesignId: selectedDesign.id,
         nailMasterId: masterId,
@@ -137,22 +150,30 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
         clientNotes: notes || undefined,
         description: selectedDesign.title,
         price: String(price),
-        masterName,
-        masterCity: city,
+        // сохраняем выбранную дату/время чтобы не потерять при возврате
+        _selectedDate: selectedDate,
+        _selectedTime: selectedTime,
+        _notes: notes || undefined,
       }));
-      router.push('/auth?as=client');
+      setRedirecting(true);
+      // Небольшая задержка — пользователь видит пояснение перед редиректом
+      setTimeout(() => router.push('/auth?as=client'), 800);
       return;
     }
 
+    // 3. Клиент → создаём заказ
+    await createOrder(token);
+  };
+
+  const createOrder = async (token: string) => {
     setLoading(true);
     setError('');
-    const token = getToken();
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          nailDesignId: selectedDesign.id,
+          nailDesignId: selectedDesign!.id,
           nailMasterId: masterId,
           requestedDateTime: new Date(`${selectedDate}T${selectedTime}:00`).toISOString(),
           clientNotes: notes || undefined,
@@ -161,7 +182,6 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
       });
       const json = await res.json();
       if (json.success) {
-        sessionStorage.setItem('just_booked', '1');
         setSuccess(true);
       } else {
         setError(json.error || 'Ошибка создания заказа');
@@ -172,6 +192,24 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
       setLoading(false);
     }
   };
+
+  /* ── Redirecting overlay (guest → /auth) ───────────── */
+
+  if (redirecting) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+        <div className="fixed inset-0 bg-black/50" />
+        <div className="relative z-10 w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl bg-background p-8 shadow-xl text-center" onClick={(e) => e.stopPropagation()}>
+          <div className="text-5xl mb-4">💅</div>
+          <h3 className="font-bold text-xl mb-2">Вы записываетесь на маникюр</h3>
+          <p className="text-sm text-muted-foreground mb-6">
+            Для завершения записи подтвердите номер телефона на следующем экране
+          </p>
+          <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+        </div>
+      </div>
+    );
+  }
 
   /* ── Success screen ────────────────────────────────── */
 

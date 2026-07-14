@@ -36,11 +36,11 @@ function getNum(v: number | string | null | undefined): number | null {
 }
 
 function getPrice(m: Master & { _price?: string | number | null }): number | null {
-  return getNum(m._price) || getNum((m as Record<string, unknown>).startingPrice as string);
+  return getNum(m._price) || getNum((m as unknown as Record<string, unknown>).startingPrice as string);
 }
 
 function getDuration(m: Master & { _duration?: string | number | null }): number | null {
-  return getNum(m._duration) || getNum((m as Record<string, unknown>)._masterDuration as string);
+  return getNum(m._duration) || getNum((m as unknown as Record<string, unknown>)._masterDuration as string);
 }
 
 /* ── Memoized Master Row ────────────────────────────────── */
@@ -187,7 +187,7 @@ export function MastersListModal({ designId, designTitle, open, onClose }: Props
         break;
       }
       case 'rating':
-        list.sort((a, b) => (parseFloat(b.rating || '0') - parseFloat(a.rating || '0')));
+        list.sort((a, b) => (parseFloat(String(a.rating || '0')) - parseFloat(String(b.rating || '0'))));
         break;
       case 'distance':
       default:

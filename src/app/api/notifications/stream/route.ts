@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
       };
 
       await check();
-      const checkTimer = setInterval(check, 5000); // проверка каждые 5 секунд
+      const checkTimer = setInterval(check, 30000); // проверка каждые 30 секунд
 
       const cleanup = () => {
         clearInterval(pingTimer);
