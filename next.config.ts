@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ['*.ru.tuna.am'],
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '**' },

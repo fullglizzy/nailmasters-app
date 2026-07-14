@@ -24,6 +24,7 @@ export function useGeolocation(): UseGeolocationResult {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const requestedRef = useRef(false);
+  const [permissionDenied, setPermissionDenied] = useState(false);
 
   // Восстанавливаем из кеша при монтировании
   useEffect(() => {
@@ -46,45 +47,53 @@ export function useGeolocation(): UseGeolocationResult {
   }, []);
 
   const request = useCallback(() => {
-    // Уже получили или запрашиваем — не спамим
-    if (coords || loading || requestedRef.current) return;
+    // Уже получили координаты — не спамим. Но если ошибка — разрешаем повтор.
+    if (coords || loading) return;
 
     console.log('[geo] request() called');
 
-    // Способ 1: Browser Geolocation API
-    if (navigator.geolocation) {
+    // Способ 1: Browser Geolocation API (если не было ошибки ранее)
+    if (!permissionDenied && navigator.geolocation) {
       console.log('[geo] trying navigator.geolocation...');
-      requestedRef.current = true;
       setLoading(true);
       setError(null);
 
-      navigator.geolocation.getCurrentPosition(
+      // Используем watchPosition вместо getCurrentPosition —
+      // надёжнее в Safari iOS, который молча дропает одиночные запросы.
+      const watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          const c = {
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-          };
+          navigator.geolocation.clearWatch(watchId);
+          requestedRef.current = true;
+          const c = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
           console.log('[geo] success via browser:', c);
           setCoords(c);
           setLoading(false);
-          try {
-            localStorage.setItem('geo_coords', JSON.stringify({ ...c, ts: Date.now() }));
-          } catch {}
+          try { localStorage.setItem('geo_coords', JSON.stringify({ ...c, ts: Date.now() })); } catch {}
         },
         (err) => {
+          navigator.geolocation.clearWatch(watchId);
           console.warn('[geo] browser geolocation failed, code:', err.code, 'msg:', err.message);
           setLoading(false);
+          if (err.code === err.PERMISSION_DENIED) setPermissionDenied(true);
           // Fallback: IP-геолокация
           requestIpFallback();
         },
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
       );
+
+      // Защита от вечного зависания: если через 12с нет ответа — идём в fallback
+      setTimeout(() => {
+        if (loading && !coords) {
+          navigator.geolocation.clearWatch(watchId);
+          console.warn('[geo] watchPosition timed out');
+          requestIpFallback();
+        }
+      }, 12000);
     } else {
-      console.log('[geo] navigator.geolocation not available');
-      // Способ 2: IP-геолокация
+      console.log('[geo] navigator.geolocation not available or permission denied');
       requestIpFallback();
     }
-  }, [coords, loading]);
+  }, [coords, loading, permissionDenied]);
 
   // IP-based fallback через бесплатный сервис
   const requestIpFallback = useCallback(async () => {
