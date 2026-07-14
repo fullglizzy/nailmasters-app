@@ -52,24 +52,3 @@ export class TooManyRequestsError extends AppError {
     this.name = 'TooManyRequestsError';
   }
 }
-
-// Обработчик ошибок для API routes (вызывается с await)
-export async function handleApiError(error: unknown) {
-  if (error instanceof AppError) {
-    const { errorResponse } = await import('@/lib/response');
-    return errorResponse(error.message, error.statusCode);
-  }
-
-  // Zod validation error
-  if (error instanceof Error && error.name === 'ZodError') {
-    const { errorResponse } = await import('@/lib/response');
-    return errorResponse(error.message, 422);
-  }
-
-  // Log unexpected errors
-  const { logger } = await import('@/lib/logger');
-  logger.error(error, 'Unhandled API error');
-
-  const { errorResponse } = await import('@/lib/response');
-  return errorResponse('Internal server error', 500);
-}

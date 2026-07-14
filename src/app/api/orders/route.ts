@@ -6,6 +6,7 @@ import { successResponse, errorResponse, paginatedResponse } from '@/lib/respons
 import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
 import { createDesignSnapshot } from '@/lib/design-snapshot';
 import { blockTimeSlot } from '@/lib/schedule';
+import { sendNotification } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
 import { formatDisplayAddress } from '@/lib/utils';
 
@@ -153,10 +154,8 @@ export const POST = withAuth(async (req: NextRequest) => {
       recipientId: nailMasterId, relatedOrderId: order.id,
     }).returning();
 
-    // WebSocket push
-    if (globalThis.sendNotification) {
-      globalThis.sendNotification(nailMasterId, { id: notif.id, type: 'order_created', title: 'Новый заказ', message: notif.message, createdAt: notif.createdAt }).catch(() => {});
-    }
+    // Realtime push (Redis pub/sub на будущее; SSE-полинг покрывает доставку)
+    sendNotification(nailMasterId, { id: notif.id, type: 'order_created', title: 'Новый заказ', message: notif.message, createdAt: notif.createdAt }).catch(() => {});
 
     return successResponse(order, 'Заказ создан', 201);
   } catch (error) {

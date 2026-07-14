@@ -1,26 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Users, ShoppingBag, Image, Star, Calendar, Settings } from 'lucide-react';
 import { useAdminStats } from '@/hooks/api';
+import { useAuth } from '@/components/providers/auth-provider';
 
 export default function DashboardPage() {
-  const [role, setRole] = useState<string | null>(null);
+  const { user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    if (!token || !userStr) { router.push('/auth'); return; }
-    const user = JSON.parse(userStr);
-    setRole(user.role);
-  }, [router]);
+    if (!isLoading && !isAuthenticated) router.push('/auth');
+  }, [isLoading, isAuthenticated, router]);
+
+  const role = user?.role ?? null;
 
   const { data: stats, isLoading: statsLoading } = useAdminStats();
 
-  if (role === null || (role === 'admin' && statsLoading)) {
+  if (isLoading || role === null || (role === 'admin' && statsLoading)) {
     return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
   }
 

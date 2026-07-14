@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
-import { useAuthState } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import type { Design, DesignDetail } from '@/lib/types';
 
 // ── Query Key Factories ───────────────────────────────────
@@ -69,11 +69,11 @@ export function usePopularDesigns() {
  * Disabled when not authenticated (returns empty array, no API call).
  */
 export function useLikedDesigns() {
-  const { token } = useAuthState();
+  const { isAuthenticated, user } = useAuth();
   return useQuery({
-    queryKey: [...designKeys.liked(), token],
+    queryKey: [...designKeys.liked(), user?.id],
     queryFn: () => apiGet<Design[]>('/api/designs/liked'),
-    enabled: !!token,
+    enabled: isAuthenticated,
   });
 }
 

@@ -39,4 +39,4 @@ export const POST = async (req: NextRequest) => {
   console.log(`[SMS] Code ${code} for ${phone}, saved id=${saved?.id}, expires=${expiresAt.toISOString()}`);
 
   return successResponse({ phone, expiresIn: 300 }, 'Код отправлен');
-});
+};

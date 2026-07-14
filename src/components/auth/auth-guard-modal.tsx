@@ -52,6 +52,3 @@ export function AuthGuardModal({ open, onClose, action = 'выполнить э�
     </div>
   );
 }
-
-// Re-export from shared API client for backwards compatibility
-export { getAuthToken, isGuest, isAuthenticated } from '@/lib/api';

@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { ArrowLeft, Send, MessageCircle, User, ChevronRight, Check, CheckCheck, Paperclip, X, ChevronLeft, Reply, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildImageGrid } from '@/lib/image-grid';
+import { useAuth } from '@/components/providers/auth-provider';
+import { logger } from '@/lib/logger';
 
 interface Conversation {
   userId: string; name: string; avatarUrl: string | null;
@@ -25,6 +27,7 @@ interface Message {
 export default function MessagesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user, getToken } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeChat, setActiveChat] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -54,15 +57,12 @@ export default function MessagesPage() {
 
   // Загружаем свой ID
   useEffect(() => {
-    try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      currentUserId.current = user.id || '';
-    } catch {}
-  }, []);
+    currentUserId.current = user?.id || '';
+  }, [user?.id]);
 
   // Загружаем диалоги
   const loadConversations = useCallback(() => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     fetch('/api/messages', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
@@ -78,7 +78,7 @@ export default function MessagesPage() {
     const name = searchParams.get('name');
     if (withId && name) {
       setActiveChat({ userId: withId, name, avatarUrl: null, lastMessage: '', lastTime: '', unread: 0, isMine: false });
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (token) {
         fetch(`/api/messages?with=${withId}`, { headers: { Authorization: `Bearer ${token}` } })
           .then(r => r.json())
@@ -109,7 +109,7 @@ export default function MessagesPage() {
   // Загружаем сообщения диалога
   const openChat = useCallback((conv: Conversation) => {
     setActiveChat(conv);
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     fetch(`/api/messages?with=${conv.userId}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
@@ -133,7 +133,7 @@ export default function MessagesPage() {
   useEffect(() => {
     const chatUserId = activeChat?.userId;
     if (!chatUserId) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     const interval = setInterval(() => {
       fetch(`/api/messages?with=${chatUserId}`, { headers: { Authorization: `Bearer ${token}` } })
@@ -161,7 +161,7 @@ export default function MessagesPage() {
 
   // SSE: реальное время
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     const es = new EventSource(`/api/messages/stream?token=${encodeURIComponent(token)}`);
     es.onmessage = (event) => {
@@ -179,7 +179,7 @@ export default function MessagesPage() {
           // Обновляем список диалогов
           loadConversations();
         }
-      } catch {}
+      } catch (err) { logger.error(err, 'messages SSE parse failed'); }
     };
     return () => es.close();
   }, [activeChat, loadConversations]);
@@ -189,7 +189,7 @@ export default function MessagesPage() {
     const files = e.target.files;
     if (!files || !files.length || !activeChat) return;
     setUploading(true);
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const fd = new FormData();
       for (let i = 0; i < files.length; i++) fd.append('files', files[i]);
@@ -214,7 +214,7 @@ export default function MessagesPage() {
   // Удаление сообщения
   const handleDelete = async (msgId: string) => {
     setMenuMsgId(null);
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       await fetch(`/api/messages/${msgId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token!}` } });
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, isDeleted: true, text: '', attachments: null } : m));
@@ -239,7 +239,7 @@ export default function MessagesPage() {
     if (editingMsg) {
       if (!text.trim()) return;
       setSending(true);
-      const token = localStorage.getItem('token');
+      const token = getToken();
       try {
         await fetch(`/api/messages/${editingMsg.id}`, {
           method: 'PUT',
@@ -257,7 +257,7 @@ export default function MessagesPage() {
     // Новая отправка
     if (!hasContent) return;
     setSending(true);
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const res = await fetch('/api/messages', {
         method: 'POST',

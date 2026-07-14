@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { X, Star } from 'lucide-react';
-import { AuthGuardModal, getAuthToken } from '@/components/auth/auth-guard-modal';
+import { AuthGuardModal } from '@/components/auth/auth-guard-modal';
+import { useAuth } from '@/components/providers/auth-provider';
 
 interface Props {
   open: boolean;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function ReviewModal({ open, onClose, masterId, masterName, onSubmitted }: Props) {
+  const { getToken } = useAuth();
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [text, setText] = useState('');
@@ -23,7 +25,7 @@ export function ReviewModal({ open, onClose, masterId, masterName, onSubmitted }
 
   const handleSubmit = async () => {
     if (!rating) { setError('Поставьте оценку'); return; }
-    const token = getAuthToken();
+    const token = getToken();
     if (!token) { setShowAuthGuard(true); return; }
     setSaving(true); setError('');
     try {

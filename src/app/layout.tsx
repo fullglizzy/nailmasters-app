@@ -3,7 +3,7 @@ import { Manrope, Yeseva_One } from 'next/font/google';
 import { Providers } from '@/components/providers/providers';
 import { AppHeader } from '@/components/layout/app-header';
 import { BottomNavigation } from '@/components/layout/bottom-nav';
-import { GuestSessionProvider } from '@/components/providers/guest-provider';
+import { AuthProvider } from '@/components/providers/auth-provider';
 import './globals.css';
 
 const manrope = Manrope({
@@ -47,11 +47,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Перейти к содержимому
         </a>
         <Providers>
-          <GuestSessionProvider>
+          <AuthProvider>
             <AppHeader />
             <main id="main-content" className="pb-20 md:pb-0">{children}</main>
             <BottomNavigation />
-          </GuestSessionProvider>
+          </AuthProvider>
         </Providers>
       </body>
     </html>

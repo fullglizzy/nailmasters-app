@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
-import { useAuthState } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import type { OrderEnriched } from '@/lib/types';
 
 // ── Query Key Factories ───────────────────────────────────
@@ -20,11 +20,11 @@ export const orderKeys = {
 // ── Hooks ─────────────────────────────────────────────────
 
 export function useOrders(status?: string) {
-  const { token } = useAuthState();
+  const { isAuthenticated, user } = useAuth();
   return useQuery({
-    queryKey: [...orderKeys.list(status), token],
+    queryKey: [...orderKeys.list(status), user?.id],
     queryFn: () => apiGet<OrderEnriched[]>('/api/orders', status ? { status } : undefined),
-    enabled: !!token,
+    enabled: isAuthenticated,
     refetchOnMount: true,
     staleTime: 0,
   });

@@ -4,6 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
+import { useAuth } from '@/components/providers/auth-provider';
 import type { Master, MasterProfile, Service, ScheduleSlot } from '@/lib/types';
 
 // ── Query Key Factories ───────────────────────────────────
@@ -94,8 +95,8 @@ export function useMasterReviews(masterId: string | undefined) {
 }
 
 export function useMyReviews() {
-  const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
-  const clientId = user.id || '';
+  const { user } = useAuth();
+  const clientId = user?.id || '';
   return useQuery({
     queryKey: masterKeys.myReviews(),
     queryFn: () => apiGet<unknown[]>('/api/master-rating', { clientId }),

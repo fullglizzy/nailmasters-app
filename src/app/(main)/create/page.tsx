@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Sparkles, Plus, X, Upload, Hash, Eye, Play } from 'lucide-react';
-import { useAuthState } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 
 /* ── Constants ──────────────────────────────────────────── */
 
@@ -35,7 +35,7 @@ interface MediaItem { url: string; type: 'image' | 'video'; }
 
 export default function CreateDesignPage() {
   const router = useRouter();
-  const { token } = useAuthState();
+  const { getToken } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -80,6 +80,7 @@ export default function CreateDesignPage() {
     setUploading(true);
     setError('');
 
+    const token = getToken();
     try {
       const results: MediaItem[] = [];
 
@@ -128,7 +129,7 @@ export default function CreateDesignPage() {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
-  }, [token]);
+  }, [getToken]);
 
   /* ── Tags ────────────────────────────────────────────── */
 
@@ -192,6 +193,7 @@ export default function CreateDesignPage() {
     setSubmitting(true);
     setError('');
 
+    const token = getToken();
     try {
       // Rotate images that need rotation, upload rotated versions
       const rotatedUrls: Record<number, string> = {};

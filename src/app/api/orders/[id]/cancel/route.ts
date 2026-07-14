@@ -3,6 +3,7 @@ import { db, schema } from '@/lib/db';
 import { eq, and } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/response';
 import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
+import { sendNotification } from '@/lib/notifications';
 import { logger } from '@/lib/logger';
 
 export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
@@ -49,9 +50,7 @@ export const PUT = withAuth(async (req: NextRequest, { params }: { params: Promi
     recipientId: order.nailMasterId, relatedOrderId: id,
   }).returning();
 
-  if (globalThis.sendNotification) {
-    globalThis.sendNotification(order.nailMasterId, { id: notif.id, type: 'order_cancelled', title: 'Заказ отменён', message: notif.message, createdAt: notif.createdAt }).catch(() => {});
-  }
+  sendNotification(order.nailMasterId, { id: notif.id, type: 'order_cancelled', title: 'Заказ отменён', message: notif.message, createdAt: notif.createdAt }).catch(() => {});
 
   return successResponse(null, 'Заказ отменен');
 });

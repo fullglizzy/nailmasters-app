@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { ReviewModal } from '@/components/review/review-modal';
 import { useOrders } from '@/hooks/api';
+import { useAuth } from '@/components/providers/auth-provider';
 import type { OrderEnriched } from '@/lib/types';
 
 /* ── Constants ──────────────────────────────────────────── */
@@ -32,16 +33,12 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function BookingsTab() {
   const { data: orders = [], isLoading, refetch } = useOrders();
-  const [role, setRole] = useState('');
+  const { user, getToken } = useAuth();
+  const role = user?.role || '';
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [reviewMaster, setReviewMaster] = useState<{ id: string; name: string } | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState(false);
-
-  useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    setRole(user.role || '');
-  }, []);
 
   useEffect(() => {
     if (sessionStorage.getItem('just_booked')) {
@@ -51,7 +48,7 @@ export function BookingsTab() {
   }, []);
 
   const handleAction = async (orderId: string, action: string, body?: Record<string, unknown>) => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     setActingId(orderId);
     try {

@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Shield, Loader2, Check, Smartphone, User, Sparkles, MapPin, ArrowRight } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useAuth } from '@/components/providers/auth-provider';
+import type { UserProfile } from '@/lib/types';
 
 /* ──────────────────────────────────────────────
    Country codes
@@ -55,6 +57,7 @@ type Step = 'phone' | 'code' | 'name';
 export default function AuthPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { login, getToken, refresh } = useAuth();
   const queryAs = searchParams.get('as');       // 'master' → регистрация мастером
   const queryMode = searchParams.get('mode');    // 'login' → явный вход в существующий аккаунт
   const registerAs = queryAs === 'master' ? 'nailmaster' : 'client';
@@ -211,7 +214,7 @@ export default function AuthPage() {
     setError('');
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const currentToken = localStorage.getItem('token');
+      const currentToken = getToken();
       if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
 
       const res = await fetch('/api/auth/verify-code', {
@@ -232,12 +235,11 @@ export default function AuthPage() {
   /* ── Persist auth ───────────────────────── */
 
   const persistAuth = (data: { token: string; refreshToken: string; user: Record<string, unknown> }) => {
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('refreshToken', data.refreshToken);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    localStorage.removeItem('guest_likes');
-    localStorage.setItem('guest_created', '1');
-    window.dispatchEvent(new Event('auth-change'));
+    login({
+      token: data.token,
+      refreshToken: data.refreshToken,
+      user: data.user as unknown as UserProfile,
+    });
   };
 
   /* ── Complete new-user registration ─────── */
@@ -264,11 +266,8 @@ export default function AuthPage() {
         return;
       }
 
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      user.fullName = fullName.trim();
-      user.role = registerAs;
-      localStorage.setItem('user', JSON.stringify(user));
-      window.dispatchEvent(new Event('auth-change'));
+      // Профиль обновлён на сервере — перечитываем сессию (fullName, role)
+      await refresh();
 
       // Если был букинг — создаём заказ
       const ctx = readPendingBooking();
@@ -391,7 +390,7 @@ export default function AuthPage() {
       return;
     }
 
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) { setError('Сессия истекла. Попробуйте снова.'); return; }
 
     await completeRegistration(token);

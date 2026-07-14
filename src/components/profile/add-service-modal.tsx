@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X, Clock } from 'lucide-react';
 import { useModal } from '@/hooks/use-modal';
+import { useAuth } from '@/components/providers/auth-provider';
 
 interface Props { open: boolean; onClose: () => void; onCreated: () => void; }
 
@@ -16,6 +17,7 @@ const DURATION_PRESETS = [
 
 export function AddServiceModal({ open, onClose, onCreated }: Props) {
   const { dialogRef, handleKeyDown } = useModal(open, onClose);
+  const { getToken } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -29,7 +31,7 @@ export function AddServiceModal({ open, onClose, onCreated }: Props) {
     if (!price || Number(price) < 100) { setError('Цена должна быть не менее 100 $'); return; }
     if (!duration) { setError('Выберите длительность'); return; }
     setSaving(true); setError('');
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const res = await fetch('/api/masters/services', {
         method: 'POST',

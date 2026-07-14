@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { X, Clock, Loader2, Sparkles, ArrowRight, Search } from 'lucide-react';
-import { useAuthState } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import { useMasterDesigns, useAvailableSlots } from '@/hooks/api';
 import { DesignDetailsModal } from '@/components/design/design-details-modal';
 
@@ -60,7 +60,7 @@ function formatDateLabel(d: string): { weekday: string; label: string; isToday: 
 
 export function BookingModal({ masterId, masterName, masterInfo, onClose, preselectedDesignId }: BookingModalProps) {
   const router = useRouter();
-  const { isGuest, token } = useAuthState();
+  const { isGuest, isAuthenticated, getToken } = useAuth();
 
   const { data: designs = [], isLoading: designsLoading } = useMasterDesigns(masterId);
   const { data: availableSlots = [], isLoading: slotsLoading } = useAvailableSlots(masterId);
@@ -129,7 +129,7 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
     }
 
     // Guest → save full context for auth page, redirect
-    if (!token || isGuest) {
+    if (!isAuthenticated || isGuest) {
       sessionStorage.setItem('pending_booking', JSON.stringify({
         nailDesignId: selectedDesign.id,
         nailMasterId: masterId,
@@ -146,6 +146,7 @@ export function BookingModal({ masterId, masterName, masterInfo, onClose, presel
 
     setLoading(true);
     setError('');
+    const token = getToken();
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',

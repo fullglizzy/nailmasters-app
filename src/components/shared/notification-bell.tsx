@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { Bell } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNotifications, notificationKeys } from '@/hooks/api';
-import { useAuthState } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
+import { logger } from '@/lib/logger';
 
 /**
  * Notification bell — global, rendered in header on every page.
@@ -13,22 +14,26 @@ import { useAuthState } from '@/components/providers/guest-provider';
  * - SSE keeps the count live (invalidates RQ when new notifs arrive).
  */
 export function NotificationBell() {
-  const { token } = useAuthState();
+  const { isAuthenticated, getToken } = useAuth();
   const { data: notifs = [] } = useNotifications();
   const queryClient = useQueryClient();
 
   // SSE — live notification count globally
   useEffect(() => {
+    if (!isAuthenticated) return;
+    const token = getToken();
     if (!token) return;
     const es = new EventSource(`/api/notifications/stream?token=${encodeURIComponent(token)}`);
     es.onmessage = () => {
       queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     };
-    es.onerror = () => {};
+    es.onerror = (event) => {
+      logger.error(event, 'NotificationBell SSE error');
+    };
     return () => es.close();
-  }, [token, queryClient]);
+  }, [isAuthenticated, getToken, queryClient]);
 
-  if (!token) return null;
+  if (!isAuthenticated) return null;
 
   const unread = notifs.filter((n) => !n.isRead).length;
 

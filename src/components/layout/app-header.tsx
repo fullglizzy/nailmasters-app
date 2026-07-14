@@ -4,12 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Search, Plus, User } from 'lucide-react';
 import { ThemeToggle } from '@/components/shared/theme-toggle';
-import { useAuthState } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import { NotificationBell } from '@/components/shared/notification-bell';
 
 export function AppHeader() {
   const pathname = usePathname();
-  const { token, role } = useAuthState();
+  const { isAuthenticated, user } = useAuth();
 
   const isAuthPage = pathname === '/auth';
   const isFeedPage = pathname.startsWith('/explore');
@@ -26,7 +26,7 @@ export function AppHeader() {
             { href: '/trending', label: 'Популярное' },
             { href: '/', label: 'Главная' },
             //{ href: '/client-info', label: 'Для заказчика' },
-            ...(role === 'admin' ? [{ href: '/admin' as string, label: 'Админка' }] : []),
+            ...(user?.role === 'admin' ? [{ href: '/admin' as string, label: 'Админка' }] : []),
           ].map((item) => (
             <Link
               key={item.href}
@@ -52,7 +52,7 @@ export function AppHeader() {
             <Search className="h-[18px] w-[18px]" />
           </Link>
 
-          {token && (
+          {isAuthenticated && (
             <Link
               href="/create"
               aria-label="Создать дизайн"
@@ -75,8 +75,8 @@ export function AppHeader() {
               )}
             </Link>
           )}*/}
-          {token && <NotificationBell />}
-          {token && (
+          {isAuthenticated && <NotificationBell />}
+          {isAuthenticated && (
             <Link
               href="/profile"
               aria-label="Профиль"

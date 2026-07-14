@@ -14,7 +14,7 @@ import { DesignCard } from '@/components/design/design-card';
 import { ScrollableRow } from '@/components/shared/scrollable-row';
 import { useProfile, useMasterDesigns } from '@/hooks/api';
 import { useLikedIds } from '@/hooks/use-liked-ids';
-import { clearAuth } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import type { Design, ScheduleSlot } from '@/lib/types';
 
 function ProfileContent() {
@@ -24,13 +24,14 @@ function ProfileContent() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { getToken, logout, refresh } = useAuth();
 
   // Tab state — internal for instant switching, URL param for initial load / shareability
   const [tab, setTab] = useState(() => searchParams.get('tab') || 'overview');
 
   const { data: profile, isLoading, refetch } = useProfile();
 
-  const handleLogout = () => clearAuth();
+  const handleLogout = () => logout();
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
   if (!profile) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
@@ -186,7 +187,7 @@ function ProfileContent() {
           {tab === 'favorites' && <FavoritesTab />}
           {isMaster && tab === 'designs' && <MasterDesignsTab userId={profile.id} />}
           {isMaster && tab === 'schedule' && <MasterScheduleTab key={scheduleKey} onAdd={async (date, start, end) => {
-            const token = localStorage.getItem('token');
+            const token = getToken();
             await fetch('/api/masters/schedule', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -194,7 +195,7 @@ function ProfileContent() {
             });
             setScheduleKey(k => k + 1);
           }} onDelete={async (slotId) => {
-            const token = localStorage.getItem('token');
+            const token = getToken();
             await fetch(`/api/masters/schedule/${slotId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
             setScheduleKey(k => k + 1);
           }} />}
@@ -269,7 +270,7 @@ function ProfileContent() {
               </button>
               <button onClick={async () => {
                 setShowMasterConfirm(false);
-                const token = localStorage.getItem('token');
+                const token = getToken();
                 try {
                   const res = await fetch('/api/auth/profile', {
                     method: 'PUT',
@@ -277,10 +278,7 @@ function ProfileContent() {
                     body: JSON.stringify({ role: 'nailmaster' }),
                   });
                   if (res.ok) {
-                    const u = JSON.parse(localStorage.getItem('user') || '{}');
-                    u.role = 'nailmaster';
-                    localStorage.setItem('user', JSON.stringify(u));
-                    window.dispatchEvent(new Event('auth-change'));
+                    await refresh();
                     window.location.reload();
                   }
                 } catch {}
@@ -328,6 +326,7 @@ function MasterDesignsTab({ userId }: { userId: string }) {
 
 // Master schedule management tab
 function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: string, end: string) => Promise<void>; onDelete?: (slotId: string) => Promise<void> }) {
+  const { getToken } = useAuth();
   const [slots, setSlots] = useState<ScheduleSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -337,7 +336,7 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
   const [newEnd, setNewEnd] = useState('10:00');
 
   const load = () => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     fetch('/api/masters/schedule', { headers: { Authorization: `Bearer ${token!}` } })
       .then(r => r.json()).then(j => { if (j.success) setSlots(j.data); })
       .finally(() => setLoading(false));

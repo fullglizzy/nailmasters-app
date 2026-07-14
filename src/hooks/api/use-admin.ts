@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
-import { useAuthState } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import type { AdminStats, AdminUser, Design, OrderEnriched } from '@/lib/types';
 
 // ── Query Keys ────────────────────────────────────────────
@@ -20,37 +20,37 @@ export const adminKeys = {
 // ── Hooks ─────────────────────────────────────────────────
 
 export function useAdminStats() {
-  const { token, role } = useAuthState();
+  const { isAuthenticated, user } = useAuth();
   return useQuery({
     queryKey: adminKeys.stats(),
     queryFn: () => apiGet<AdminStats>('/api/admin/stats'),
-    enabled: !!token && role === 'admin',
+    enabled: isAuthenticated && user?.role === 'admin',
   });
 }
 
 export function useAdminUsers(search?: string) {
-  const { token, role } = useAuthState();
+  const { isAuthenticated, user } = useAuth();
   return useQuery({
     queryKey: adminKeys.users(search),
     queryFn: () => apiGet<AdminUser[]>('/api/admin/users', search ? { search } : undefined),
-    enabled: !!token && role === 'admin',
+    enabled: isAuthenticated && user?.role === 'admin',
   });
 }
 
 export function useAdminDesigns() {
-  const { token, role } = useAuthState();
+  const { isAuthenticated, user } = useAuth();
   return useQuery({
     queryKey: adminKeys.designs(),
     queryFn: () => apiGet<Design[]>('/api/designs/admin/all'),
-    enabled: !!token && role === 'admin',
+    enabled: isAuthenticated && user?.role === 'admin',
   });
 }
 
 export function useAdminOrders() {
-  const { token, role } = useAuthState();
+  const { isAuthenticated, user } = useAuth();
   return useQuery({
     queryKey: adminKeys.orders(),
     queryFn: () => apiGet<OrderEnriched[]>('/api/admin/orders'),
-    enabled: !!token && role === 'admin',
+    enabled: isAuthenticated && user?.role === 'admin',
   });
 }

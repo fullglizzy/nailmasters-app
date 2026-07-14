@@ -6,8 +6,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { X, Camera, Plus, Shield, Home, MapPin, Loader2, Check, AlertTriangle } from 'lucide-react';
 import { useModal } from '@/hooks/use-modal';
 import { useProfile, profileKeys } from '@/hooks/api';
+import { useAuth } from '@/components/providers/auth-provider';
 import { MASTER_SPECIALTIES, CITIES } from '@/data/specialties';
 import { shortenAddress } from '@/lib/utils';
+import { logger } from '@/lib/logger';
 
 /* ── Types ──────────────────────────────────────────────── */
 
@@ -24,6 +26,7 @@ interface Suggestion { displayName: string; lat: string; lon: string; }
 export function EditProfileModal({ open, onClose, onSaved }: Props) {
   const { dialogRef, handleKeyDown } = useModal(open, onClose);
   const { data: profile, isLoading: loading } = useProfile();
+  const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -177,7 +180,7 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
     }
 
     setSaving(true); setError('');
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const body: Record<string, unknown> = { fullName, age: age ? Number(age) : undefined };
 
@@ -210,7 +213,7 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
   const handleAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const fd = new FormData(); fd.append('avatar', file);
     try {
       const res = await fetch('/api/auth/avatar', {
@@ -223,7 +226,7 @@ export function EditProfileModal({ open, onClose, onSaved }: Props) {
         queryClient.invalidateQueries({ queryKey: profileKeys.all });
         onSaved();
       }
-    } catch { /* network — silent fail for avatar */ }
+    } catch (err) { logger.error(err, 'Avatar upload failed'); }
   };
 
   /* ── Specialties ────────────────────────────────────── */

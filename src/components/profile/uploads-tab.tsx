@@ -4,15 +4,15 @@ import { Upload } from 'lucide-react';
 import { DesignCard } from '@/components/design/design-card';
 import { useDesigns } from '@/hooks/api';
 import { useLikedIds } from '@/hooks/use-liked-ids';
+import { useAuth } from '@/components/providers/auth-provider';
 import type { Design } from '@/lib/types';
 
 export function UploadsTab() {
   const { data: allDesigns = [], isLoading } = useDesigns({ includeOwn: true, limit: 100 });
   const likedIds = useLikedIds();
+  const { user } = useAuth();
 
-  const userId = typeof window !== 'undefined'
-    ? JSON.parse(localStorage.getItem('user') || '{}').id
-    : '';
+  const userId = user?.id || '';
 
   const designs = (allDesigns || []).filter((d: Design) =>
     d.uploadedByClientId === userId || d.uploadedByMasterId === userId

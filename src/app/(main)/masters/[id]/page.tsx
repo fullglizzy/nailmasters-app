@@ -14,7 +14,7 @@ import { DistanceBadge } from '@/components/shared/distance-badge';
 import { useGeolocation } from '@/hooks/use-geolocation';
 import { formatDisplayAddress } from '@/lib/utils';
 import { useMaster, useMasterDesigns, useMasterReviews, masterKeys } from '@/hooks/api';
-import { useAuthState } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import { useLikedIds } from '@/hooks/use-liked-ids';
 import type { Design, Rating } from '@/lib/types';
 
@@ -27,14 +27,12 @@ export default function MasterProfilePage() {
   const [showBooking, setShowBooking] = useState(!!urlBookDesignId);
   const [showReview, setShowReview] = useState(false);
   const [reviewRefreshKey, setReviewRefreshKey] = useState(0);
-  const { role } = useAuthState();
+  const { user } = useAuth();
+  const role = user?.role;
   const { coords: clientCoords, request: requestGeo } = useGeolocation();
   // Мастер не может записаться ни к кому — он поставщик услуг, а не клиент.
   // Также нельзя записаться к самому себе.
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  useEffect(() => {
-    try { setCurrentUserId(JSON.parse(localStorage.getItem('user') || '{}').id || null); } catch {}
-  }, []);
+  const currentUserId = user?.id ?? null;
   const isOwnProfile = currentUserId === id;
   const canBook = !isOwnProfile && role !== 'nailmaster';
 

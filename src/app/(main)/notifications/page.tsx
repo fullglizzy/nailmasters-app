@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Bell, Check, ArrowLeft, ShoppingBag, Star, MessageCircle, Sparkles, Clock, Shield, CalendarCheck, XCircle, AlertTriangle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNotifications, notificationKeys } from '@/hooks/api';
+import { useAuth } from '@/components/providers/auth-provider';
 import type { NotificationType, Notification } from '@/lib/types';
 
 // ── Config ───────────────────────────────────────────────
@@ -78,11 +79,12 @@ function groupByDate(notifs: Notification[]): Record<string, Notification[]> {
 export default function NotificationsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { getToken } = useAuth();
   const { data: notifs = [], isLoading } = useNotifications();
   const [showRead, setShowRead] = useState(false);
 
   const markRead = async (id?: string) => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     await fetch('/api/notifications', {
       method: 'PUT',

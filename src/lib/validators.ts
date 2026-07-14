@@ -18,10 +18,6 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Введите пароль'),
 });
 
-export const registerGuestSchema = z.object({
-  // Гость создается автоматически, без входных данных
-});
-
 export const registerAdminSchema = z.object({
   email: z.string().email(),
   username: z.string().min(3).max(255),

@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { X, Send, Heart, CornerDownRight } from 'lucide-react';
 import { UserAvatar } from '@/components/shared/user-avatar';
-import { AuthGuardModal, getAuthToken } from '@/components/auth/auth-guard-modal';
+import { AuthGuardModal } from '@/components/auth/auth-guard-modal';
+import { useAuth } from '@/components/providers/auth-provider';
 import { useComments } from '@/hooks/api';
 
 /* ── Types ──────────────────────────────────────────────── */
@@ -192,6 +193,7 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [showAuthGuard, setShowAuthGuard] = useState(false);
+  const { ensureAuth } = useAuth();
 
   const { data: commentsData, isLoading } = useComments(designId);
 
@@ -214,7 +216,7 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
   /* ── Send comment (stable callback) ─────────────────── */
   const sendComment = useCallback(async (body: { text: string; parentCommentId?: string }) => {
     if (!body.text.trim()) return false;
-    const token = getAuthToken();
+    const token = await ensureAuth();
     if (!token) { setShowAuthGuard(true); return false; }
     try {
       const res = await fetch(`/api/designs/${designId}/comments`, {
@@ -239,7 +241,7 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
       }
     } catch { /* network error */ }
     return false;
-  }, [designId, onCommentAdded]);
+  }, [designId, onCommentAdded, ensureAuth]);
 
   /* ── Wrapped send for reply (pre-bound parentId) ────── */
   const handleSendReply = useCallback(async (parentId: string, text: string): Promise<boolean> => {
@@ -255,7 +257,7 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
 
   /* ── Like comment (optimistic, stable callback) ──────── */
   const handleLikeComment = useCallback(async (commentId: string) => {
-    const token = getAuthToken();
+    const token = await ensureAuth();
     if (!token) { setShowAuthGuard(true); return; }
 
     // Optimistic toggle
@@ -281,7 +283,7 @@ export function CommentsModal({ designId, designTitle, open, onClose, onCommentA
       });
       setComments((prev) => prev.map((c) => toggleLikeRecursive(c, commentId, !wasLiked)));
     }
-  }, [likedIds]);
+  }, [likedIds, ensureAuth]);
 
   /* ── Toggle replies (stable callback) ───────────────── */
   const handleToggleReplies = useCallback((id: string) => {

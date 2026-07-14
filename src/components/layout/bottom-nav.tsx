@@ -3,12 +3,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Search, Plus, User, Bell, Shield } from 'lucide-react';
-import { useAuthState } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import { useNotifications } from '@/hooks/api';
 
 export function BottomNavigation() {
   const pathname = usePathname();
-  const { role } = useAuthState();
+  const { user } = useAuth();
   const { data: notifs = [] } = useNotifications();
   const unread = notifs.filter((n) => !n.isRead).length;
 
@@ -17,7 +17,7 @@ export function BottomNavigation() {
     { href: '/search', icon: Search, label: 'Search' },
     { href: '/create', icon: Plus, label: 'Create' },
     { href: '/notifications', icon: Bell, label: 'Alerts' },
-    ...(role === 'admin' ? [{ href: '/admin', icon: Shield, label: 'Admin' }] : []),
+    ...(user?.role === 'admin' ? [{ href: '/admin', icon: Shield, label: 'Admin' }] : []),
     { href: '/profile', icon: User, label: 'Profile' },
   ];
 

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/components/providers/auth-provider';
 
 interface UseLikeOptions {
   designId: string;
@@ -22,6 +23,7 @@ export function useLike({ designId, initialLikesCount, initialIsLiked }: UseLike
   const [likesCount, setLikesCount] = useState(initialLikesCount);
   const [isLoading, setIsLoading] = useState(false);
   const queryClient = useQueryClient();
+  const { ensureAuth } = useAuth();
 
   // Track whether user just toggled — if so, skip syncing from parent props
   const justToggledRef = useRef(false);
@@ -52,7 +54,8 @@ export function useLike({ designId, initialLikesCount, initialIsLiked }: UseLike
     setLikesCount((prev) => prev + (wasLiked ? -1 : 1));
     justToggledRef.current = true;
 
-    const token = localStorage.getItem('token');
+    // Ленивое создание гостя: идентифицируем пользователя только при первом действии
+    const token = await ensureAuth();
     if (!token) {
       // No auth — revert
       setIsLiked(wasLiked);
@@ -89,7 +92,7 @@ export function useLike({ designId, initialLikesCount, initialIsLiked }: UseLike
     } finally {
       setIsLoading(false);
     }
-  }, [designId, queryClient]); // stable — doesn't depend on isLiked/isLoading
+  }, [designId, queryClient, ensureAuth]); // stable — doesn't depend on isLiked/isLoading
 
   return { isLiked, likesCount, handleLike, isLoading };
 }

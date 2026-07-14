@@ -20,23 +20,21 @@ export class ApiError extends Error {
 }
 
 // ── Token helpers ─────────────────────────────────────────
+//
+// Единственный источник access-токена — AuthProvider (в памяти, useRef).
+// Он регистрирует геттер через `registerTokenGetter`; больше никакого
+// localStorage для авторизации. До регистрации (или для гостя без сессии)
+// геттер отсутствует и токен считается пустым.
+
+let tokenGetter: (() => string | null) | null = null;
+
+/** Вызывается AuthProvider'ом один раз при монтировании. */
+export function registerTokenGetter(getter: () => string | null): void {
+  tokenGetter = getter;
+}
 
 export function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  const token = localStorage.getItem('token');
-  if (!token) return null;
-  // Guests may have a token but should be excluded for protected actions
-  return token;
-}
-
-export function isGuest(): boolean {
-  if (typeof window === 'undefined') return false;
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  return user.isGuest === true;
-}
-
-export function isAuthenticated(): boolean {
-  return !!getAuthToken();
+  return tokenGetter ? tokenGetter() : null;
 }
 
 // ── Core fetch wrapper ────────────────────────────────────

@@ -2,6 +2,7 @@
 
 import { Star, MessageSquare } from 'lucide-react';
 import { useMyReviews, useMasterReviews } from '@/hooks/api';
+import { useAuth } from '@/components/providers/auth-provider';
 
 interface ReviewItem {
   id: string;
@@ -16,11 +17,9 @@ interface ReviewItem {
 }
 
 export function ReviewsTab() {
-  const user = typeof window !== 'undefined'
-    ? JSON.parse(localStorage.getItem('user') || '{}')
-    : { role: '', id: '' };
-  const role = user.role || '';
-  const userId = user.id || '';
+  const { user } = useAuth();
+  const role = user?.role || '';
+  const userId = user?.id || '';
 
   const isMaster = role === 'nailmaster';
 

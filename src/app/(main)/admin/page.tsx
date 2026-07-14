@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useAdminStats, useAdminUsers, useAdminDesigns, useAdminOrders } from '@/hooks/api';
 import { useMasters } from '@/hooks/api';
+import { useAuth } from '@/components/providers/auth-provider';
 import type { AdminUser, Design, OrderEnriched, Master } from '@/lib/types';
 import { OrderDetailModal } from './order-detail-modal';
 
@@ -19,18 +20,17 @@ type Tab = 'overview' | 'users' | 'designs' | 'orders' | 'masters';
 export default function AdminPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { user, getToken, isLoading: authLoading } = useAuth();
   const [tab, setTab] = useState<Tab>('overview');
-  const [role, setRole] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<OrderEnriched | null>(null);
   const [search, setSearch] = useState('');
 
+  const role = user?.role ?? '';
+
   // Auth check
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    if (!token || user.role !== 'admin') { router.push('/auth'); return; }
-    setRole(user.role);
-  }, [router]);
+    if (!authLoading && role !== 'admin') { router.push('/auth'); }
+  }, [authLoading, role, router]);
 
   // RQ hooks — auto-fetch when token exists
   const { data: stats, isLoading: statsLoading } = useAdminStats();
@@ -42,20 +42,20 @@ export default function AdminPage() {
   const isLoading = statsLoading && role === 'admin';
 
   const handleBlock = async (userId: string) => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     await fetch(`/api/admin/users/${userId}/block`, { method: 'PUT', headers: { Authorization: `Bearer ${token!}` } });
     queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
   };
 
   const handleModerate = async (designId: string, approved: boolean) => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     await fetch(`/api/designs/${designId}/moderate`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token!}` }, body: JSON.stringify({ isModerated: approved, isActive: approved }) });
     queryClient.invalidateQueries({ queryKey: ['admin', 'designs'] });
   };
 
   const handleDeleteDesign = async (designId: string) => {
     if (!confirm('Удалить дизайн навсегда?')) return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const res = await fetch(`/api/designs/${designId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token!}` } });
     if (res.ok) {
       queryClient.invalidateQueries({ queryKey: ['admin', 'designs'] });

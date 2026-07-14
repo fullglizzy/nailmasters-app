@@ -123,33 +123,3 @@ export function withRateLimit(
     };
   };
 }
-
-// ============================================================
-// Middleware: валидация тела запроса с Zod
-// ============================================================
-export function withValidation<T>(schema: { parse: (data: unknown) => T }) {
-  return (handler: RouteHandler): RouteHandler => {
-    return async (req, context) => {
-      try {
-        const body = await req.json();
-        schema.parse(body);
-        return handler(req, context);
-      } catch (error) {
-        if (error instanceof Error && error.name === 'ZodError') {
-          return errorResponse(error.message, 422);
-        }
-        return errorResponse('Невалидный JSON в теле запроса', 400);
-      }
-    };
-  };
-}
-
-// ============================================================
-// Композиция middlewares
-// ============================================================
-export function composeMiddleware(
-  handler: RouteHandler,
-  ...middlewares: Array<(h: RouteHandler) => RouteHandler>
-): RouteHandler {
-  return middlewares.reduceRight((h, mw) => mw(h), handler);
-}

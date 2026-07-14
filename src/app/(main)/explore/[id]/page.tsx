@@ -7,7 +7,7 @@ import {
   Heart, MessageCircle, Eye, CalendarCheck, Share2, Volume2, VolumeX,
   ChevronUp, ChevronDown, ArrowLeft, Play, Sparkles, X, Check,
 } from 'lucide-react';
-import { useAuthState } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import { useLike } from '@/hooks/use-like';
 import { useDesigns } from '@/hooks/api';
 import { useLikedIds } from '@/hooks/use-liked-ids';
@@ -16,6 +16,7 @@ import { DesignDetailsModal } from '@/components/design/design-details-modal';
 import { MastersListModal } from '@/components/design/masters-list-modal';
 import { ShareModal } from '@/components/design/share-modal';
 import type { FeedDesign } from '@/lib/types';
+import { logger } from '@/lib/logger';
 
 /* ── Helpers ────────────────────────────────────────────── */
 
@@ -110,9 +111,10 @@ const CanDoModal = memo(function CanDoModal({ designId, onClose, onChange }: {
   const [success, setSuccess] = useState(false);
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState('');
+  const { getToken } = useAuth();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     fetch(`/api/masters/can-do/${designId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -124,13 +126,13 @@ const CanDoModal = memo(function CanDoModal({ designId, onClose, onChange }: {
           if (json.data.duration) setDuration(String(json.data.duration));
         }
       })
-      .catch(() => {})
+      .catch((err) => { logger.error(err, 'CanDoModal fetch failed'); })
       .finally(() => setLoading(false));
-  }, [designId]);
+  }, [designId, getToken]);
 
   const handleSave = async () => {
     setSaving(true);
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       const body: Record<string, unknown> = {};
       if (price) body.customPrice = String(parseInt(price) || 0);
@@ -143,13 +145,13 @@ const CanDoModal = memo(function CanDoModal({ designId, onClose, onChange }: {
       setAdded(true);
       onChange?.(true);
       setSuccess(true);
-    } catch { /* ignore */ }
+    } catch (err) { logger.error(err, 'CanDoModal save failed'); }
     finally { setSaving(false); }
   };
 
   const handleRemove = async () => {
     setSaving(true);
-    const token = localStorage.getItem('token');
+    const token = getToken();
     try {
       await fetch(`/api/masters/can-do/${designId}`, {
         method: 'DELETE',
@@ -158,7 +160,7 @@ const CanDoModal = memo(function CanDoModal({ designId, onClose, onChange }: {
       setAdded(false); setPrice(''); setDuration('');
       onChange?.(false);
       onClose();
-    } catch { /* ignore */ }
+    } catch (err) { logger.error(err, 'CanDoModal remove failed'); }
     finally { setSaving(false); }
   };
 
@@ -241,7 +243,8 @@ export default function TikTokFeedPage() {
   const hasScrolledToStart = useRef(false);
   const rafRef = useRef(0);
 
-  const { role } = useAuthState();
+  const { user, getToken } = useAuth();
+  const role = user?.role;
 
   const { data: designs = [], isLoading } = useDesigns({
     sort: 'popular',
@@ -269,7 +272,7 @@ export default function TikTokFeedPage() {
   // Загружаем can-do дизайны мастера с сервера (переживает перезагрузку)
   useEffect(() => {
     if (role !== 'nailmaster') return;
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     fetch('/api/masters/can-do/ids', {
       headers: { Authorization: `Bearer ${token}` },
@@ -280,8 +283,8 @@ export default function TikTokFeedPage() {
           setCanDoIds(new Set(json.data));
         }
       })
-      .catch(() => {});
-  }, [role]);
+      .catch((err) => { logger.error(err, 'can-do ids fetch failed'); });
+  }, [role, getToken]);
 
   /* ── Init muted state ────────────────────────────────── */
   useEffect(() => {

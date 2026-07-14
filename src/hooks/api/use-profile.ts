@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
-import { useAuthState } from '@/components/providers/guest-provider';
+import { useAuth } from '@/components/providers/auth-provider';
 import type { UserProfile, Notification } from '@/lib/types';
 
 // ── Query Keys ────────────────────────────────────────────
@@ -25,11 +25,11 @@ export const notificationKeys = {
  * Re-fetches on auth state changes (login / logout / guest creation).
  */
 export function useProfile() {
-  const { token } = useAuthState();
+  const { isAuthenticated, user } = useAuth();
   return useQuery({
-    queryKey: [...profileKeys.all, token],
+    queryKey: [...profileKeys.all, user?.id],
     queryFn: () => apiGet<UserProfile>('/api/auth/profile'),
-    enabled: !!token,
+    enabled: isAuthenticated,
   });
 }
 
@@ -38,10 +38,10 @@ export function useProfile() {
  * Enabled automatically when the auth context has a token.
  */
 export function useNotifications() {
-  const { token } = useAuthState();
+  const { isAuthenticated, user } = useAuth();
   return useQuery({
-    queryKey: [...notificationKeys.all, token],
+    queryKey: [...notificationKeys.all, user?.id],
     queryFn: () => apiGet<Notification[]>('/api/notifications'),
-    enabled: !!token,
+    enabled: isAuthenticated,
   });
 }
