@@ -1,4 +1,4 @@
-import { pgTable, uuid, date, time, varchar, text, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, date, time, varchar, text, timestamp, index, unique } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { masterProfiles } from './users';
 
@@ -18,6 +18,7 @@ export const schedules = pgTable('schedules', {
 }, (table) => ({
   masterIdx: index('idx_schedules_master').on(table.masterId),
   dateIdx: index('idx_schedules_date').on(table.workDate),
+  uniqueSlot: unique('idx_schedules_unique_slot').on(table.masterId, table.workDate, table.startTime, table.endTime),
 }));
 
 export const schedulesRelations = relations(schedules, ({ one }) => ({

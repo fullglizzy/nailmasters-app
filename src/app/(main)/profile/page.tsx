@@ -352,6 +352,7 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
   const [batchInterval, setBatchInterval] = useState(60);
   const [batchDays, setBatchDays] = useState<string[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
+  const [batchError, setBatchError] = useState('');
 
   useEffect(() => {
     const token = getToken();
@@ -366,6 +367,7 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
     const token = getToken();
     if (!token) return;
     setBatchLoading(true);
+    setBatchError('');
     try {
       const res = await fetch('/api/masters/schedule/batch', {
         method: 'POST',
@@ -378,11 +380,16 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
           repeatDays: batchDays.length ? batchDays : undefined,
         }),
       });
-      if (res.ok) {
+      const json = await res.json();
+      if (res.ok && json.success) {
         setShowAdd(false);
         setRefreshKey(k => k + 1);
+      } else {
+        setBatchError(json.error || `Ошибка: ${res.status}`);
       }
-    } catch {} finally { setBatchLoading(false); }
+    } catch {
+      setBatchError('Ошибка соединения');
+    } finally { setBatchLoading(false); }
   };
 
   const handleDelete = async (id: string) => {
@@ -429,6 +436,10 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
       {/* Batch add form */}
       {showAdd && (
         <div className="rounded-2xl border border-border/40 bg-card p-5 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+          {batchError && (
+            <div className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{batchError}</div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Дата</label>

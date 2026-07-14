@@ -6,6 +6,11 @@ import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
 import { createTimeSlotSchema, idParamSchema } from '@/lib/validators';
 import { validateTimeSlot } from '@/lib/schedule';
 
+function toMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
 // GET — мое расписание
 export const GET = withAuth(async (req: NextRequest) => {
   const user = (req as AuthenticatedRequest).user!;
@@ -32,15 +37,31 @@ export const POST = withAuth(async (req: NextRequest) => {
   const validationError = validateTimeSlot(workDate, startTime, endTime);
   if (validationError) return errorResponse(validationError, 422);
 
-  // Проверка дубликата
-  const existing = await db.select().from(schema.schedules).where(and(
-    eq(schema.schedules.masterId, user.userId),
-    eq(schema.schedules.workDate, workDate),
-    eq(schema.schedules.startTime, startTime),
-    eq(schema.schedules.endTime, endTime),
-  )).limit(1);
+  // Проверка дубликата и пересечений
+  const sameDateSlots = await db
+    .select({ startTime: schema.schedules.startTime, endTime: schema.schedules.endTime })
+    .from(schema.schedules)
+    .where(and(
+      eq(schema.schedules.masterId, user.userId),
+      eq(schema.schedules.workDate, workDate),
+    ));
 
-  if (existing.length) return errorResponse('Такой слот уже существует', 409);
+  const sStart = toMinutes(startTime);
+  const sEnd = toMinutes(endTime);
+
+  for (const ex of sameDateSlots) {
+    const exStart = toMinutes((ex.startTime as string).slice(0, 5));
+    const exEnd = toMinutes((ex.endTime as string).slice(0, 5));
+
+    // Точный дубликат
+    if (exStart === sStart && exEnd === sEnd) {
+      return errorResponse('Такой слот уже существует', 409);
+    }
+    // Пересечение по времени
+    if (sStart < exEnd && sEnd > exStart) {
+      return errorResponse('Слот пересекается с существующим', 409);
+    }
+  }
 
   const [slot] = await db.insert(schema.schedules).values({
     workDate,
