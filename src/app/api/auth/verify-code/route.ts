@@ -19,42 +19,42 @@ export const POST = withRateLimit('auth')(async (req: NextRequest) => {
     if (phone.length < 7) return errorResponse('Введите телефон', 422);
     if (code.length < 4 || code.length > 10) return errorResponse('Введите код', 422);
 
-    // ── Находим валидный код ──
-    const validCode = await db
+    // ── Находим самый свежий валидный код ──
+    const recentCode = await db
       .select()
       .from(schema.smsCodes)
       .where(and(
         eq(schema.smsCodes.phone, phone),
-        eq(schema.smsCodes.code, code),
         eq(schema.smsCodes.used, false),
         gt(schema.smsCodes.expiresAt, new Date(Date.now() - 30_000)),
       ))
+      .orderBy(schema.smsCodes.createdAt)
       .limit(1);
 
-    // ── Считаем количество попыток на этот телефон за последние 5 минут ──
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
-    const [attemptCount] = await db
-      .select({ count: sql<number>`COUNT(*)::int` })
-      .from(schema.smsCodes)
-      .where(and(eq(schema.smsCodes.phone, phone), gt(schema.smsCodes.createdAt, fiveMinAgo)));
-
-    const totalAttempts = (attemptCount?.count ?? 0) + 1;
-
-    // ── Блокировка при слишком многих попытках ──
-    if (totalAttempts > 20) {
-      logger.warn({ phone, attempts: totalAttempts }, 'Brute-force blocked');
-      return errorResponse('Слишком много попыток. Попробуйте позже.', 429);
-    }
-
-    if (!validCode.length) {
-      logger.warn({ phone, code }, 'Invalid verification code');
+    if (!recentCode.length) {
+      logger.warn({ phone }, 'No valid code found');
       return errorResponse('Неверный или истекший код', 401);
     }
 
-    // Помечаем код использованным
-    await db.update(schema.smsCodes).set({ used: true }).where(eq(schema.smsCodes.id, validCode[0].id));
+    const currentCode = recentCode[0];
 
-    logger.info({ phone }, 'Code verified');
+    // ── Блокировка по числу попыток подбора ЭТОГО кода ──
+    if (currentCode.attempts >= MAX_ATTEMPTS_PER_CODE) {
+      // Инвалидируем код — больше не принимаем попытки
+      await db.update(schema.smsCodes).set({ used: true }).where(eq(schema.smsCodes.id, currentCode.id));
+      logger.warn({ phone, codeId: currentCode.id }, 'Code invalidated after max attempts');
+      return errorResponse('Слишком много попыток. Запросите новый код.', 429);
+    }
+
+    // ── Проверяем совпадение кода ──
+    if (currentCode.code !== code) {
+      // Инкрементируем счётчик неудачных попыток
+      await db.update(schema.smsCodes)
+        .set({ attempts: sql`attempts + 1` })
+        .where(eq(schema.smsCodes.id, currentCode.id));
+      logger.warn({ phone, attempts: currentCode.attempts + 1 }, 'Wrong code attempt');
+      return errorResponse('Неверный или истекший код', 401);
+    }
 
   // ── Ищем гостя по токену (если гость уже авторизован) ──
   const authHeader = req.headers.get('authorization');
@@ -148,7 +148,7 @@ export const POST = withRateLimit('auth')(async (req: NextRequest) => {
   };
 
   // Помечаем код использованным
-  await db.update(schema.smsCodes).set({ used: true }).where(eq(schema.smsCodes.id, validCode[0].id));
+  await db.update(schema.smsCodes).set({ used: true }).where(eq(schema.smsCodes.id, currentCode.id));
 
   const token = await generateAccessToken(tokenPayload);
   const refreshToken = await generateRefreshToken(user.id);
