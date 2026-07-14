@@ -55,6 +55,9 @@ test-results/
 playwright-report/
 playwright/.cache/
 
+# Seed images
+samples/
+
 # Misc
 *.pem
 .turbo
