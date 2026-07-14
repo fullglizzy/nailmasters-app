@@ -15,6 +15,7 @@ import { ScrollableRow } from '@/components/shared/scrollable-row';
 import { useProfile, useMasterDesigns } from '@/hooks/api';
 import { useLikedIds } from '@/hooks/use-liked-ids';
 import { useAuth } from '@/components/providers/auth-provider';
+import { pluralRu } from '@/lib/utils';
 import type { Design, ScheduleSlot } from '@/lib/types';
 
 function ProfileContent() {
@@ -339,12 +340,18 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
   const { getToken } = useAuth();
   const [slots, setSlots] = useState<ScheduleSlot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [newDate, setNewDate] = useState('');
-  const [newStart, setNewStart] = useState('09:00');
-  const [newEnd, setNewEnd] = useState('10:00');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Batch add state
+  const [showAdd, setShowAdd] = useState(false);
+  const [batchDate, setBatchDate] = useState(new Date().toISOString().split('T')[0]);
+  const [batchStart, setBatchStart] = useState('09:00');
+  const [batchEnd, setBatchEnd] = useState('17:00');
+  const [batchInterval, setBatchInterval] = useState(60);
+  const [batchDays, setBatchDays] = useState<string[]>([]);
+  const [batchLoading, setBatchLoading] = useState(false);
 
   useEffect(() => {
     const token = getToken();
@@ -355,181 +362,169 @@ function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: 
       .finally(() => setLoading(false));
   }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleAdd = async () => {
-    if (!newDate) return;
-    await onAdd?.(newDate, newStart, newEnd);
-    setNewDate('');
-    setShowAdd(false);
-    setRefreshKey(k => k + 1);
+  const handleBatchAdd = async () => {
+    const token = getToken();
+    if (!token) return;
+    setBatchLoading(true);
+    try {
+      const res = await fetch('/api/masters/schedule/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          workDate: batchDate,
+          startTime: batchStart,
+          endTime: batchEnd,
+          intervalMinutes: batchInterval,
+          repeatDays: batchDays.length ? batchDays : undefined,
+        }),
+      });
+      if (res.ok) {
+        setShowAdd(false);
+        setRefreshKey(k => k + 1);
+      }
+    } catch {} finally { setBatchLoading(false); }
   };
 
   const handleDelete = async (id: string) => {
-    setDeletingId(null);
-    await onDelete?.(id);
-    setRefreshKey(k => k + 1);
+    setDeletingId(id);
+    try {
+      const token = getToken();
+      await fetch(`/api/masters/schedule/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token!}` },
+      });
+      setRefreshKey(k => k + 1);
+    } catch {} finally { setDeletingId(null); }
   };
 
-  // Generate next 14 dates for quick pick
-  const dateOptions = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(); d.setDate(d.getDate() + i);
-    return d.toISOString().split('T')[0];
-  });
+  const toggleDay = (day: string) => {
+    setBatchDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
+  };
 
   if (loading) return <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
 
+  // Group + sort
   const grouped: Record<string, ScheduleSlot[]> = {};
   slots.forEach((s) => { (grouped[s.workDate] ??= []).push(s); });
+  const sortedDates = Object.keys(grouped).sort();
+  const statusColor = (status: string) => status === 'booked' ? 'bg-destructive/10 border-destructive/20 text-destructive' : status === 'blocked' ? 'bg-muted border-border/40 text-muted-foreground' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600';
+  const statusDot = (status: string) => status === 'booked' ? '🔴' : status === 'blocked' ? '⚫' : '🟢';
 
-  const inputClass = "rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all";
+  const inputClass = "rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all w-full";
+  const chipClass = (active: boolean) => `rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${active ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:bg-surface'}`;
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{slots.length} {slots.length === 1 ? 'слот' : slots.length < 5 ? 'слота' : 'слотов'}</p>
-        <button onClick={() => { setShowAdd(!showAdd); setNewDate(''); }} className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
-          {showAdd ? 'Отмена' : '+ Добавить слоты'}
-        </button>
+        <p className="text-sm text-muted-foreground">{slots.length} {pluralRu(slots.length, 'слот', 'слота', 'слотов')}</p>
+        <div className="flex gap-2">
+          <button onClick={() => setShowAdd(!showAdd)}
+            className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
+            {showAdd ? 'Отмена' : '+ Добавить'}
+          </button>
+        </div>
       </div>
 
-      {/* ── Add slot form ── */}
+      {/* Batch add form */}
       {showAdd && (
         <div className="rounded-2xl border border-border/40 bg-card p-5 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-          {/* Step 1: Pick date */}
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-2">
-              <Calendar className="h-3.5 w-3.5 inline mr-1.5" />Выберите дату
-            </label>
-            <div className="overflow-hidden">
-              <ScrollableRow className="flex gap-2 pb-1.5" fadeRightOffset="1.25rem" noFade>
-              {dateOptions.map(d => {
-                const date = new Date(d);
-                const isToday = d === new Date().toISOString().split('T')[0];
-                const isTomorrow = d === dateOptions[1];
-                const label = isToday ? 'Сегодня' : isTomorrow ? 'Завтра' : date.toLocaleDateString('ru', { day: 'numeric', month: 'short' });
-                const weekday = date.toLocaleDateString('ru', { weekday: 'short' });
-                return (
-                  <button
-                    key={d}
-                    onClick={() => setNewDate(d)}
-                    className={`shrink-0 flex flex-col items-center rounded-xl px-4 py-2.5 text-sm font-medium border transition-all ${
-                      newDate === d
-                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                        : 'border-border/60 hover:bg-surface text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <span className="text-[10px] uppercase opacity-70">{weekday}</span>
-                    <span className="text-sm font-semibold">{label}</span>
-                  </button>
-                );
-              })}
-              </ScrollableRow>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Дата</label>
+              <input type="date" value={batchDate} onChange={e => setBatchDate(e.target.value)} className={inputClass} />
+            </div>
+            <div></div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Начало</label>
+              <input type="time" value={batchStart} onChange={e => setBatchStart(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Конец</label>
+              <input type="time" value={batchEnd} onChange={e => setBatchEnd(e.target.value)} className={inputClass} />
             </div>
           </div>
 
-          {/* Step 2: Time range */}
-          {newDate && (
-            <div className="border-t border-border/30 pt-4 space-y-4 animate-in fade-in duration-200">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
-                <Clock className="h-3.5 w-3.5 inline mr-1.5" />Выберите время
-              </label>
-
-              {/* Quick presets */}
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { label: 'Утро', start: '09:00', end: '12:00' },
-                  { label: 'День', start: '12:00', end: '17:00' },
-                  { label: 'Вечер', start: '17:00', end: '21:00' },
-                  { label: 'Весь день', start: '09:00', end: '21:00' },
-                ].map(p => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => { setNewStart(p.start); setNewEnd(p.end); }}
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-medium border transition-all ${
-                      newStart === p.start && newEnd === p.end
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'border-border/60 hover:bg-surface text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {p.label} ({p.start.slice(0, 5)}–{p.end.slice(0, 5)})
-                  </button>
-                ))}
-              </div>
-
-              {/* Custom time inputs */}
-              <div className="flex items-center gap-3 bg-muted/30 rounded-xl p-3">
-                <div className="flex-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">С</label>
-                  <input type="time" value={newStart} onChange={e => setNewStart(e.target.value)} className={inputClass + ' w-full'} />
-                </div>
-                <span className="mt-5 text-sm text-muted-foreground font-medium">—</span>
-                <div className="flex-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">По</label>
-                  <input type="time" value={newEnd} onChange={e => setNewEnd(e.target.value)} className={inputClass + ' w-full'} />
-                </div>
-              </div>
-
-              <button
-                onClick={handleAdd}
-                disabled={!newStart || !newEnd || newStart >= newEnd}
-                className="w-full rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
-              >
-                Добавить слот {newStart}–{newEnd}
-              </button>
+          {/* Duration quick-select */}
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">Длительность слота</label>
+            <div className="flex gap-2">
+              {[30, 60, 90, 120].map(m => (
+                <button key={m} onClick={() => setBatchInterval(m)}
+                  className={chipClass(batchInterval === m)}>{m} мин</button>
+              ))}
             </div>
-          )}
+          </div>
+
+          {/* Repeat days */}
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">Повторить по дням</label>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { key: 'mon', label: 'Пн' }, { key: 'tue', label: 'Вт' }, { key: 'wed', label: 'Ср' },
+                { key: 'thu', label: 'Чт' }, { key: 'fri', label: 'Пт' }, { key: 'sat', label: 'Сб' }, { key: 'sun', label: 'Вс' },
+              ].map(d => (
+                <button key={d.key} onClick={() => toggleDay(d.key)}
+                  className={chipClass(batchDays.includes(d.key))}>{d.label}</button>
+              ))}
+            </div>
+          </div>
+
+          <button onClick={handleBatchAdd} disabled={batchLoading}
+            className="w-full rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-all">
+            {batchLoading ? 'Создание...' : 'Создать слоты'}
+          </button>
         </div>
       )}
 
-      {/* ── Slot list ── */}
-      {!slots.length && !showAdd ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border border-dashed border-border/40 bg-card/50">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-muted/30">
-            <Clock className="h-7 w-7 text-muted-foreground/40" />
-          </div>
-          <p className="text-sm font-medium text-muted-foreground">Нет слотов для записи</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Добавьте время, когда клиенты могут к вам записаться</p>
+      {/* Slots grouped by date */}
+      {sortedDates.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+          <Calendar className="h-8 w-8 mb-2 opacity-30" />
+          <p className="text-sm">Нет слотов</p>
+          <p className="text-xs opacity-60 mt-1">Добавьте слоты чтобы клиенты могли записаться</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {Object.entries(grouped).slice(0, 14).map(([date, items]) => (
-            <div key={date} className="rounded-xl border border-border/40 bg-card p-4">
-              <div className="font-semibold text-sm mb-3">{new Date(date).toLocaleDateString('ru', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-              <div className="flex flex-wrap gap-2">
-                {items.map((s) => {
-                  const isDeleting = deletingId === s.id;
-                  return isDeleting ? (
-                    <span key={s.id} className="inline-flex items-center gap-2 rounded-full bg-destructive/10 border border-destructive/20 px-3 py-1.5 text-xs font-medium animate-in fade-in zoom-in-95 duration-150">
-                      <span className="text-destructive">Удалить {s.startTime?.slice(0,5)}–{s.endTime?.slice(0,5)}?</span>
-                      <button
-                        onClick={() => handleDelete(s.id)}
-                        className="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold text-destructive-foreground hover:bg-destructive/90 transition-colors"
-                      >
-                        Да
-                      </button>
-                      <button
-                        onClick={() => setDeletingId(null)}
-                        className="rounded-full border border-border/40 px-2 py-0.5 text-[10px] font-medium hover:bg-surface transition-colors"
-                      >
-                        Нет
-                      </button>
-                    </span>
-                  ) : (
-                    <span
-                      key={s.id}
-                      onClick={() => setDeletingId(s.id)}
-                      title="Нажмите чтобы удалить"
-                      className={`rounded-full px-3 py-1.5 text-xs font-medium cursor-pointer hover:bg-destructive/10 hover:text-destructive transition-all ${
-                        s.status === 'available' ? 'bg-secondary/10 text-secondary' : 'bg-muted text-muted-foreground'
-                      }`}
-                    >
-                      {s.startTime?.slice(0,5)}–{s.endTime?.slice(0,5)}
-                    </span>
-                  );
-                })}
+        <div className="space-y-3">
+          {sortedDates.map(date => {
+            const daySlots = grouped[date];
+            const dateObj = new Date(date);
+            const isToday = date === new Date().toISOString().split('T')[0];
+            const label = isToday ? 'Сегодня' : dateObj.toLocaleDateString('ru', { weekday: 'short', day: 'numeric', month: 'short' });
+            const isExpanded = expandedDate === date;
+
+            return (
+              <div key={date} className="rounded-xl border border-border/30 bg-card overflow-hidden">
+                <button
+                  onClick={() => setExpandedDate(isExpanded ? null : date)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-accent/20 transition-colors text-left"
+                >
+                  <span className="text-sm font-semibold">{label}</span>
+                  <span className="text-xs text-muted-foreground">{daySlots.length} {pluralRu(daySlots.length, 'слот', 'слота', 'слотов')}</span>
+                </button>
+                {isExpanded && (
+                  <div className="border-t border-border/20 divide-y divide-border/10">
+                    {daySlots.sort((a, b) => a.startTime.localeCompare(b.startTime)).map(s => (
+                      <div key={s.id}
+                        className={`flex items-center justify-between px-4 py-2.5 text-sm ${statusColor(s.status)}`}>
+                        <span className="flex items-center gap-2">
+                          <span className="text-[10px]">{statusDot(s.status)}</span>
+                          {s.startTime.slice(0, 5)} – {s.endTime.slice(0, 5)}
+                          {s.notes && <span className="text-[11px] opacity-60 ml-2">{s.notes}</span>}
+                        </span>
+                        {s.status !== 'booked' && (
+                          <button onClick={() => handleDelete(s.id)} disabled={deletingId === s.id}
+                            className="text-[11px] text-muted-foreground hover:text-destructive transition-colors">
+                            {deletingId === s.id ? '...' : 'Удалить'}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

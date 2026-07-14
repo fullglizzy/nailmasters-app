@@ -217,7 +217,12 @@ export default function AuthPage() {
       const currentToken = getToken();
       if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
 
-      const res = await fetch('/api/auth/verify-code', {
+      // action=send → request-code, action=verify → verify-code
+      const endpoint = data.action === 'send'
+        ? '/api/auth/request-code'
+        : '/api/auth/verify-code';
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify(data),
