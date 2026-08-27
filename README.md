@@ -1,12 +1,12 @@
-# NailMasters v2.0
+# NailMasters v3.0
 
-Платформа каталога и заказа дизайнов маникюра. Full-stack приложение на Next.js 15.
+Платформа каталога и заказа дизайнов маникюра. Full-stack приложение на Next.js 16.
 
 ## Стек
 
 | Слой | Технологии |
 |------|-----------|
-| **Frontend** | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS, shadcn/ui |
+| **Frontend** | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS, shadcn/ui |
 | **Backend** | Next.js API Routes, Drizzle ORM, PostgreSQL |
 | **Кеш/Поиск** | Redis, PostgreSQL tsvector + GIN индекс |
 | **Изображения** | Sharp (оптимизация при загрузке) |
@@ -163,6 +163,29 @@ src/
 docker exec -i nailmasters-db psql -U nailmasters -d postgres -c "DROP DATABASE nailmasters;"
 docker exec -i nailmasters-db psql -U nailmasters -d postgres -c "CREATE DATABASE nailmasters;"
 pnpm db:push && pnpm db:search && pnpm db:seed
+```
+
+## Деплой на VPS (Ubuntu 22.04/24.04)
+
+Скрипт `deploy/deploy.sh` разворачивает приложение на чистом сервере:
+Node.js 22, PostgreSQL, Redis, Nginx + Let's Encrypt, PM2, ежедневные бэкапы.
+Подробности — в [deploy/README.md](deploy/README.md).
+
+```bash
+# тест без домена (приложение на http://IP-сервера:3000, без Nginx/SSL)
+sudo bash deploy/deploy.sh
+
+# первый запуск с доменом (от root; email нужен для SSL-сертификата)
+sudo bash deploy/deploy.sh ваш-домен.ru admin@ваш-домен.ru
+
+# с тестовыми данными при первом деплое
+SEED=1 sudo bash deploy/deploy.sh ваш-домен.ru admin@ваш-домен.ru
+
+# обновление из репозитория
+sudo bash /opt/nailmasters/deploy/deploy.sh
+
+# деплой другой ветки
+BRANCH=refactor/v3 sudo bash /opt/nailmasters/deploy/deploy.sh
 ```
 
 ## Переменные окружения
