@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { useLike } from '@/hooks/use-like';
-import { useDesigns } from '@/hooks/api';
+import { useDesigns, useDesign } from '@/hooks/api';
 import { useLikedIds } from '@/hooks/use-liked-ids';
 import { CommentsModal } from '@/components/design/comments-modal';
 import { DesignDetailsModal } from '@/components/design/design-details-modal';
@@ -252,6 +252,16 @@ export default function TikTokFeedPage() {
     limit: 40,
   });
 
+  // Свежесозданный дизайн (редирект с /create) не попадает в топ-40 популярных —
+  // дофетчим его по id из URL и ставим первым, чтобы лента открывалась на нём
+  const { data: startDesign } = useDesign(startId);
+  const displayDesigns = useMemo(() => {
+    if (!startDesign || designs.some((d) => d.id === startDesign.id)) {
+      return designs;
+    }
+    return [startDesign as unknown as FeedDesign, ...designs];
+  }, [designs, startDesign]);
+
   const likedIds = useLikedIds();
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -288,18 +298,18 @@ export default function TikTokFeedPage() {
 
   /* ── Init muted state ────────────────────────────────── */
   useEffect(() => {
-    if (!designs.length || isLoading) return;
+    if (!displayDesigns.length || isLoading) return;
     const muted: Record<string, boolean> = {};
-    designs.forEach((d) => {
+    displayDesigns.forEach((d) => {
       if ((d as FeedDesign).videoUrl) muted[d.id] = true;
     });
     setVideoMuted(muted);
-  }, [designs, isLoading]);
+  }, [displayDesigns, isLoading]);
 
   /* ── Scroll to start design once ─────────────────────── */
   useEffect(() => {
-    if (isLoading || !designs.length || !containerRef.current || hasScrolledToStart.current) return;
-    const idx = designs.findIndex((d) => d.id === startId);
+    if (isLoading || !displayDesigns.length || !containerRef.current || hasScrolledToStart.current) return;
+    const idx = displayDesigns.findIndex((d) => d.id === startId);
     if (idx >= 0) {
       hasScrolledToStart.current = true;
       const h = containerRef.current.clientHeight;
@@ -307,13 +317,13 @@ export default function TikTokFeedPage() {
       setCurrentIndex(idx);
       currentIndexRef.current = idx;
     }
-  }, [isLoading, designs, startId]);
+  }, [isLoading, displayDesigns, startId]);
 
   /* ── Video: only manage adjacent cards ───────────────── */
   useEffect(() => {
     const idx = currentIndex;
     // Pause all videos outside the visible window, play + unmute current
-    designs.forEach((d, i) => {
+    displayDesigns.forEach((d, i) => {
       const v = videoRefs.current.get(d.id);
       if (!v) return;
       if (i === idx) {
@@ -334,7 +344,7 @@ export default function TikTokFeedPage() {
         v.muted = true;
       }
     });
-  }, [currentIndex, designs]);
+  }, [currentIndex, displayDesigns]);
 
   /* ── Callbacks (stable references) ───────────────────── */
 
@@ -352,8 +362,8 @@ export default function TikTokFeedPage() {
   }, [updateIndex]);
 
   const goNext = useCallback(() => {
-    if (currentIndex < designs.length - 1) scrollToIndex(currentIndex + 1);
-  }, [currentIndex, designs.length, scrollToIndex]);
+    if (currentIndex < displayDesigns.length - 1) scrollToIndex(currentIndex + 1);
+  }, [currentIndex, displayDesigns.length, scrollToIndex]);
 
   const goPrev = useCallback(() => {
     if (currentIndex > 0) scrollToIndex(currentIndex - 1);
@@ -368,7 +378,7 @@ export default function TikTokFeedPage() {
   /* ── Desktop: one-card-at-a-time via wheel ──────────── */
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !designs.length) return;
+    if (!el || !displayDesigns.length) return;
 
     let cooldown = false;
     const COOLDOWN_MS = 800; // duration of smooth scroll animation
@@ -379,7 +389,7 @@ export default function TikTokFeedPage() {
 
       const direction = e.deltaY > 0 ? 1 : -1;
       const target = currentIndexRef.current + direction;
-      if (target < 0 || target >= designs.length) return;
+      if (target < 0 || target >= displayDesigns.length) return;
 
       cooldown = true;
       el.scrollTo({ top: target * el.clientHeight, behavior: 'auto' });
@@ -389,7 +399,7 @@ export default function TikTokFeedPage() {
 
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [designs, updateIndex]);
+  }, [displayDesigns, updateIndex]);
 
   // Mobile touch: no JS intervention — CSS scroll-snap handles everything natively.
   // GPU-composited, perfectly smooth on iOS and Android.
@@ -397,7 +407,7 @@ export default function TikTokFeedPage() {
   /* ── Scroll tracking + URL sync (rAF-throttled) ─────── */
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !designs.length) return;
+    if (!el || !displayDesigns.length) return;
 
     const onScroll = () => {
       if (rafRef.current) return;
@@ -405,13 +415,13 @@ export default function TikTokFeedPage() {
         rafRef.current = 0;
         if (!el) return;
         const idx = Math.round(el.scrollTop / el.clientHeight);
-        if (idx < 0 || idx >= designs.length) return;
+        if (idx < 0 || idx >= displayDesigns.length) return;
         if (idx === currentIndexRef.current) return;
         updateIndex(idx);
 
         if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
         urlTimerRef.current = setTimeout(() => {
-          const d = designs[idx];
+          const d = displayDesigns[idx];
           if (d && typeof window !== 'undefined') {
             window.history.replaceState(null, '', `/explore/${d.id}`);
           }
@@ -425,7 +435,7 @@ export default function TikTokFeedPage() {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
     };
-  }, [designs, updateIndex]);
+  }, [displayDesigns, updateIndex]);
 
   /* ── Media interaction callbacks ─────────────────────── */
 
@@ -444,7 +454,7 @@ export default function TikTokFeedPage() {
       v.paused ? v.play() : v.pause();
       setVideoPlaying((p) => ({ ...p, [designId]: !v.paused }));
     } else {
-      const d = designs.find((x) => x.id === designId);
+      const d = displayDesigns.find((x) => x.id === designId);
       if (!d) return;
       const all = getAllMedia(d as FeedDesign);
       if (all.length <= 1) return;
@@ -454,10 +464,10 @@ export default function TikTokFeedPage() {
       v.pause();
       setVideoPlaying((p) => ({ ...p, [designId]: false }));
     }
-  }, [designs, mediaIdx]);
+  }, [displayDesigns, mediaIdx]);
 
   const handleImageClick = useCallback((designId: string, e: React.MouseEvent) => {
-    const d = designs.find((x) => x.id === designId);
+    const d = displayDesigns.find((x) => x.id === designId);
     if (!d) return;
     const all = getAllMedia(d as FeedDesign);
     if (all.length <= 1) return;
@@ -473,7 +483,7 @@ export default function TikTokFeedPage() {
         setVideoPlaying((p) => ({ ...p, [designId]: true }));
       }, 100);
     }
-  }, [designs, mediaIdx]);
+  }, [displayDesigns, mediaIdx]);
 
   /* ── Loading / empty ─────────────────────────────────── */
   if (isLoading) {
@@ -484,7 +494,7 @@ export default function TikTokFeedPage() {
     );
   }
 
-  if (!designs.length) {
+  if (!displayDesigns.length) {
     return (
       <div className="fixed inset-0 bg-background flex flex-col items-center justify-center">
         <p className="text-xl mb-4">Нет дизайнов</p>
@@ -493,7 +503,7 @@ export default function TikTokFeedPage() {
     );
   }
 
-  const castDesign = (d: typeof designs[number]): FeedDesign => d as unknown as FeedDesign;
+  const castDesign = (d: typeof displayDesigns[number]): FeedDesign => d as unknown as FeedDesign;
 
   /* ── Render ──────────────────────────────────────────── */
   return (
@@ -505,7 +515,7 @@ export default function TikTokFeedPage() {
 
       {/* Feed */}
       <div ref={containerRef} className="h-full overflow-y-scroll snap-y snap-mandatory hide-scrollbar" style={{ scrollBehavior: 'smooth' }}>
-        {designs.map((d) => {
+        {displayDesigns.map((d) => {
           const design = castDesign(d);
           const allMedia = getAllMedia(design);
           const curMediaIdx = mediaIdx[design.id] || 0;
@@ -568,7 +578,7 @@ export default function TikTokFeedPage() {
                         onLoadedMetadata={() => {
                           const v = videoRefs.current.get(design.id);
                           if (!v) return;
-                          const idx = designs.findIndex((x) => x.id === design.id);
+                          const idx = displayDesigns.findIndex((x) => x.id === design.id);
                           if (idx === currentIndexRef.current) {
                             v.currentTime = 0;
                             v.play().catch(() => {});
@@ -686,7 +696,7 @@ export default function TikTokFeedPage() {
         <NavBtn onClick={goPrev} disabled={currentIndex === 0}>
           <ChevronUp className="h-[35px] w-[35px]" />
         </NavBtn>
-        <NavBtn onClick={goNext} disabled={currentIndex >= designs.length - 1}>
+        <NavBtn onClick={goNext} disabled={currentIndex >= displayDesigns.length - 1}>
           <ChevronDown className="h-[35px] w-[35px]" />
         </NavBtn>
       </div>
