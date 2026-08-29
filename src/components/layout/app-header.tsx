@@ -52,15 +52,13 @@ export function AppHeader() {
             <Search className="h-[18px] w-[18px]" />
           </Link>
 
-          {isAuthenticated && (
-            <Link
-              href="/create"
-              aria-label="Создать дизайн"
-              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground transition-colors"
-            >
-              <Plus className="h-[18px] w-[18px]" />
-            </Link>
-          )}
+          <Link
+            href="/create"
+            aria-label="Создать дизайн"
+            className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground transition-colors"
+          >
+            <Plus className="h-[18px] w-[18px]" />
+          </Link>
           {/*{token && !isGuest && (
             <Link
               href="/messages"

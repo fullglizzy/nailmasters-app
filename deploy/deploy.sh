@@ -185,10 +185,15 @@ fi
 echo "==> next build (standalone)"
 run_as "cd $APP_DIR && NEXT_TELEMETRY_DISABLED=1 pnpm build"
 
-# ── 7. Standalone: .env, симлинк на постоянные загрузки ─────────────────────
+# ── 7. Standalone: static, public, .env, симлинк на постоянные загрузки ─────
 echo "==> Подготовка standalone"
 STANDALONE="$APP_DIR/.next/standalone"
+# public и .next/static копируются ЯВНО: next build не гарантирует их в
+# standalone — без этого сайт открывается без CSS/JS (404 на /_next/static/*)
 run_as "cd $APP_DIR && \
+  rm -rf $STANDALONE/public $STANDALONE/.next/static && \
+  cp -r public $STANDALONE/public && \
+  cp -r .next/static $STANDALONE/.next/static && \
   mkdir -p public/uploads/avatars public/uploads/designs public/uploads/videos public/uploads/sterilization public/uploads/messages && \
   cp .env $STANDALONE/.env && \
   rm -rf $STANDALONE/public/uploads && \
