@@ -80,10 +80,13 @@ run_as() { sudo -u "$RUN_USER" -H bash -c "cd / && $*"; }
 # ── 3. Код: clone (первый раз) или pull (обновление) ────────────────────────
 if [ ! -d "$APP_DIR/.git" ]; then
   echo "==> Клонирование $BRANCH"
-  run_as "cd $APP_DIR && git clone --branch $BRANCH --single-branch $REPO_URL ."
+  run_as "cd $APP_DIR && git clone --branch $BRANCH $REPO_URL ."
 else
   echo "==> Обновление кода ($BRANCH)"
-  run_as "cd $APP_DIR && git fetch origin $BRANCH && git checkout $BRANCH && git reset --hard origin/$BRANCH"
+  # Без --single-branch при клонировании, но старые копии могли быть
+  # клонированы с ним: origin/$BRANCH тогда не существует, поэтому
+  # checkout делаем от FETCH_HEAD (fetch кладёт ветку туда)
+  run_as "cd $APP_DIR && git fetch origin $BRANCH && git checkout -B $BRANCH FETCH_HEAD && git reset --hard FETCH_HEAD"
 fi
 
 echo "==> Установка зависимостей (pnpm)"
