@@ -196,8 +196,11 @@ run_as "cd $APP_DIR && \
 
 # ── 8. PM2 (перезапуск или первый старт) ─────────────────────────────────────
 echo "==> PM2"
-if sudo -u "$RUN_USER" -H pm2 describe nailmasters >/dev/null 2>&1; then
-  sudo -u "$RUN_USER" -H pm2 restart nailmasters --update-env
+# Все pm2-команды — через run_as (cd /): прямой `sudo -u deploy -H pm2`
+# наследует cwd скрипта (например /root/nailmasters-app), в который deploy
+# зайти не может, и демон падает при spawn с EACCES
+if run_as "pm2 describe nailmasters" >/dev/null 2>&1; then
+  run_as "pm2 restart nailmasters --update-env"
 else
   # Entry-файл standalone: server.js (Next ≤15/16), server.mjs — запасной вариант
   SERVER_ENTRY="server.js"
@@ -205,8 +208,8 @@ else
   # --cwd обязателен: process.cwd() используется для public/uploads
   # Без единицы измерения (голое число) PM2 трактует лимит как БАЙТЫ и
   # рестартует процесс каждые 30 с — единица обязательна: 1500M
-  sudo -u "$RUN_USER" -H pm2 start "$STANDALONE/$SERVER_ENTRY" --name nailmasters --cwd "$APP_DIR" --max-memory-restart 1500M
-  sudo -u "$RUN_USER" -H pm2 save
+  run_as "pm2 start $STANDALONE/$SERVER_ENTRY --name nailmasters --cwd $APP_DIR --max-memory-restart 1500M"
+  run_as "pm2 save"
   # unit автозапуска создаётся от root, но с -u deploy — daemon остаётся у deploy
   pm2 startup systemd -u "$RUN_USER" --hp "/home/$RUN_USER" >/dev/null 2>&1 || true
 fi
