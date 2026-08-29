@@ -204,16 +204,38 @@ echo "==> PM2"
 # Все pm2-команды — через run_as (cd /): прямой `sudo -u deploy -H pm2`
 # наследует cwd скрипта (например /root/nailmasters-app), в который deploy
 # зайти не может, и демон падает при spawn с EACCES
+# Entry-файл standalone: server.js (Next ≤15/16), server.mjs — запасной вариант
+SERVER_ENTRY="server.js"
+[ -f "$STANDALONE/server.js" ] || SERVER_ENTRY="server.mjs"
+# Ecosystem-файл вместо флагов pm2 start: явный cwd обязателен, т.к.
+# process.cwd() определяет каталог public/uploads (флаг --cwd у pm2 start
+# может не примениться — процесс стартует с cwd /home/deploy и загрузки
+# уходят не туда). Без единицы измерения (голое число) PM2 трактует лимит
+# как БАЙТЫ и рестартует процесс каждые 30 с — единица обязательна: 1500M
+cat > "$APP_DIR/ecosystem.config.cjs" <<EOF
+module.exports = {
+  apps: [{
+    name: 'nailmasters',
+    script: '$STANDALONE/$SERVER_ENTRY',
+    cwd: '$APP_DIR',
+    max_memory_restart: '1500M',
+    env: { NODE_ENV: 'production' },
+  }],
+};
+EOF
+chown "$RUN_USER:$RUN_USER" "$APP_DIR/ecosystem.config.cjs"
+
 if run_as "pm2 describe nailmasters" >/dev/null 2>&1; then
-  run_as "pm2 restart nailmasters --update-env"
+  if run_as "pm2 jlist" | grep -q "\"cwd\":\"$APP_DIR\""; then
+    run_as "pm2 restart nailmasters --update-env"
+  else
+    echo "==> cwd приложения != $APP_DIR — пересоздаю из ecosystem"
+    run_as "pm2 delete nailmasters"
+    run_as "pm2 start $APP_DIR/ecosystem.config.cjs"
+    run_as "pm2 save"
+  fi
 else
-  # Entry-файл standalone: server.js (Next ≤15/16), server.mjs — запасной вариант
-  SERVER_ENTRY="server.js"
-  [ -f "$STANDALONE/server.js" ] || SERVER_ENTRY="server.mjs"
-  # --cwd обязателен: process.cwd() используется для public/uploads
-  # Без единицы измерения (голое число) PM2 трактует лимит как БАЙТЫ и
-  # рестартует процесс каждые 30 с — единица обязательна: 1500M
-  run_as "pm2 start $STANDALONE/$SERVER_ENTRY --name nailmasters --cwd $APP_DIR --max-memory-restart 1500M"
+  run_as "pm2 start $APP_DIR/ecosystem.config.cjs"
   run_as "pm2 save"
   # unit автозапуска создаётся от root, но с -u deploy — daemon остаётся у deploy
   pm2 startup systemd -u "$RUN_USER" --hp "/home/$RUN_USER" >/dev/null 2>&1 || true
