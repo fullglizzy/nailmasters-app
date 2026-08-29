@@ -99,7 +99,7 @@ ls /var/backups/nailmasters                 # бэкапы (БД + загруз�
 |-----|-----|
 | Код | `/opt/nailmasters` |
 | `.env` | `/opt/nailmasters/.env` (создаётся один раз) |
-| Загруженные файлы | `/opt/nailmasters/public/uploads` (переживают обновления) |
+| Загруженные файлы | `/var/lib/nailmasters/uploads` (переживают обновления; не зависят от cwd процесса) |
 | Бэкапы | `/var/backups/nailmasters` (БД — gzip-дамп, загрузки — tar.gz; хранятся 14 дней) |
 | Лог бэкапов | `/var/log/nailmasters-backup.log` |
 
@@ -132,5 +132,5 @@ TWILIO_PHONE_NUMBER="+15551234567"
 ```bash
 gunzip -c /var/backups/nailmasters/db/nailmasters_*.sql.gz | \
   sudo -u postgres psql -d nailmasters
-tar -xzf /var/backups/nailmasters/uploads/uploads_*.tar.gz -C /opt/nailmasters
+tar -xzf /var/backups/nailmasters/uploads/uploads_*.tar.gz -C /var/lib/nailmasters
 ```

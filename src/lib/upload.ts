@@ -1,7 +1,8 @@
 import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { nanoid } from 'nanoid';
 
+// Абсолютный путь (на проде: /var/lib/nailmasters/uploads) — не зависит от cwd
 const UPLOAD_DIR = process.env.UPLOAD_DIR || 'public/uploads';
 
 // Разрешенные MIME-типы
@@ -43,7 +44,8 @@ export async function saveUploadedFile(
 ): Promise<UploadResult> {
   const ext = originalName.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
   const filename = `${category}_${Date.now()}_${nanoid(8)}.${ext}`;
-  const dir = join(process.cwd(), UPLOAD_DIR, category);
+  // resolve: с абсолютным UPLOAD_DIR путь не зависит от process.cwd()
+  const dir = resolve(process.cwd(), UPLOAD_DIR, category);
 
   // Создаем директорию если не существует
   await mkdir(dir, { recursive: true });

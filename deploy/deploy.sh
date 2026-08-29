@@ -36,6 +36,7 @@ REPO_URL="${REPO_URL:-https://github.com/fullglizzy/nailmasters-app.git}"
 BRANCH="${BRANCH:-refactor/v3}"
 SEED="${SEED:-0}"
 APP_DIR="/opt/nailmasters"
+UPLOADS_DIR="/var/lib/nailmasters/uploads"
 BACKUP_DIR="/var/backups/nailmasters"
 LOG_DIR="/var/log/nailmasters"
 RUN_USER="deploy"
@@ -67,8 +68,8 @@ systemctl enable --now postgresql redis-server
 # ── 2. Пользователь deploy и структура каталогов ─────────────────────────────
 echo "==> Пользователь $RUN_USER и каталоги"
 id -u "$RUN_USER" >/dev/null 2>&1 || useradd --create-home --shell /bin/bash "$RUN_USER"
-mkdir -p "$APP_DIR" "$BACKUP_DIR" "$LOG_DIR"
-chown -R "$RUN_USER:$RUN_USER" "$APP_DIR" "$BACKUP_DIR" "$LOG_DIR"
+mkdir -p "$APP_DIR" "$UPLOADS_DIR" "$BACKUP_DIR" "$LOG_DIR"
+chown -R "$RUN_USER:$RUN_USER" "$APP_DIR" "$UPLOADS_DIR" "$BACKUP_DIR" "$LOG_DIR"
 # PM2-демон пишет в $HOME/.pm2 — каталог обязан принадлежать deploy
 mkdir -p "/home/$RUN_USER/.pm2"
 chown -R "$RUN_USER:$RUN_USER" "/home/$RUN_USER/.pm2"
@@ -124,8 +125,8 @@ ADMIN_REGISTRATION_SECRET="$ADMIN_SECRET"
 NODE_ENV="production"
 LOG_LEVEL="info"
 
-# Загрузка файлов (каталог относительный — относительно cwd процесса,
-# поэтому задаётся симлинком public/uploads в standalone, не менять!)
+# Загрузка файлов (абсолютный путь — не зависит от cwd процесса)
+UPLOAD_DIR="$UPLOADS_DIR"
 # MAX_IMAGE_SIZE_MB="10"
 # MAX_VIDEO_SIZE_MB="100"
 # MAX_AVATAR_SIZE_MB="5"
@@ -141,6 +142,14 @@ EOF
   echo "    Пароль БД $DB_USER (из .env на сервере): $DB_PASSWORD"
 else
   echo "==> .env уже существует — пропуск"
+fi
+
+# Существующие серверы: если UPLOAD_DIR не задан — дописываем (путь из cwd
+# переносится в /var/lib, иначе загрузки ломаются из-за cwd PM2-процесса)
+if ! grep -q '^UPLOAD_DIR=' "$APP_DIR/.env"; then
+  echo "==> Добавляю UPLOAD_DIR в .env"
+  echo "UPLOAD_DIR=\"$UPLOADS_DIR\"" >> "$APP_DIR/.env"
+  chown "$RUN_USER:$RUN_USER" "$APP_DIR/.env"
 fi
 
 # ── 5. База данных: роль, БД, схема, поиск, сид (только при первом деплое) ──
@@ -190,14 +199,20 @@ echo "==> Подготовка standalone"
 STANDALONE="$APP_DIR/.next/standalone"
 # public и .next/static копируются ЯВНО: next build не гарантирует их в
 # standalone — без этого сайт открывается без CSS/JS (404 на /_next/static/*)
+# Перенос старых загрузок из public/uploads в UPLOADS_DIR (одноразово)
+if [ -d "$APP_DIR/public/uploads" ] && [ -z "$(ls -A "$UPLOADS_DIR" 2>/dev/null)" ] && [ -n "$(ls -A "$APP_DIR/public/uploads" 2>/dev/null)" ]; then
+  echo "==> Перенос загрузок из public/uploads в $UPLOADS_DIR"
+  cp -a "$APP_DIR/public/uploads/." "$UPLOADS_DIR/"
+  chown -R "$RUN_USER:$RUN_USER" "$UPLOADS_DIR"
+fi
 run_as "cd $APP_DIR && \
   rm -rf $STANDALONE/public $STANDALONE/.next/static && \
   cp -r public $STANDALONE/public && \
   cp -r .next/static $STANDALONE/.next/static && \
-  mkdir -p public/uploads/avatars public/uploads/designs public/uploads/videos public/uploads/sterilization public/uploads/messages && \
+  mkdir -p $UPLOADS_DIR/avatars $UPLOADS_DIR/designs $UPLOADS_DIR/videos $UPLOADS_DIR/sterilization $UPLOADS_DIR/messages && \
   cp .env $STANDALONE/.env && \
   rm -rf $STANDALONE/public/uploads && \
-  ln -sfn $APP_DIR/public/uploads $STANDALONE/public/uploads"
+  ln -sfn $UPLOADS_DIR $STANDALONE/public/uploads"
 
 # ── 8. PM2 (перезапуск или первый старт) ─────────────────────────────────────
 echo "==> PM2"
@@ -293,7 +308,7 @@ fi
 echo "   Логи:       sudo -u $RUN_USER -H pm2 logs nailmasters"
 echo "   Статус:     sudo -u $RUN_USER -H pm2 status"
 echo "   .env:       $APP_DIR/.env"
-echo "   Загрузки:   $APP_DIR/public/uploads"
+echo "   Загрузки:   $UPLOADS_DIR"
 echo "   Бэкапы:     $BACKUP_DIR (cron ежедневно 03:00)"
 echo "   Обновление: sudo bash $APP_DIR/deploy/deploy.sh"
 [ "$FIRST_DEPLOY" = "yes" ] && echo "   Тестовые аккаунты сида: README.md (код SMS — 000000)"
