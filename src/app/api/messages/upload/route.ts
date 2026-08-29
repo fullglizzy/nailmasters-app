@@ -14,7 +14,8 @@ export const POST = withAuth(async (req: NextRequest) => {
     if (files.length > 10) return errorResponse('Максимум 10 файлов', 422);
 
     const maxSize = 10 * 1024 * 1024; // 10MB per file
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'messages');
+    const uploadsRoot = process.env.UPLOAD_DIR || path.join(process.cwd(), 'public', 'uploads');
+    const uploadDir = path.join(uploadsRoot, 'messages');
     await mkdir(uploadDir, { recursive: true });
 
     const results: { url: string; type: string }[] = [];

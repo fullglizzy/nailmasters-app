@@ -63,3 +63,6 @@ samples/
 # Misc
 *.pem
 .turbo
+
+# PM2 (генерируется deploy/deploy.sh)
+ecosystem.config.cjs
