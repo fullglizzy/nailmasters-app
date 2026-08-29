@@ -15,8 +15,8 @@
 #
 # Переменные окружения (опционально):
 #   REPO_URL — адрес репозитория (по умолчанию fullglizzy/nailmasters-app)
-#   BRANCH   — ветка для деплоя (по умолчанию main; для текущей разработки
-#              можно передать BRANCH=refactor/v3)
+#   BRANCH   — ветка для деплоя (по умолчанию refactor/v3; можно передать
+#              BRANCH=main и т.п.)
 #   SEED     — SEED=1 — заполнить БД тестовыми данными при первом деплое
 #              (по умолчанию 0 — база создаётся пустой)
 #
@@ -33,7 +33,7 @@ set -euo pipefail
 DOMAIN="${1:-}"
 CERTBOT_EMAIL="${2:-}"
 REPO_URL="${REPO_URL:-https://github.com/fullglizzy/nailmasters-app.git}"
-BRANCH="${BRANCH:-main}"
+BRANCH="${BRANCH:-refactor/v3}"
 SEED="${SEED:-0}"
 APP_DIR="/opt/nailmasters"
 BACKUP_DIR="/var/backups/nailmasters"
@@ -159,8 +159,10 @@ else
 fi
 
 echo "==> Схема и поиск (drizzle-kit push + tsvector)"
-# push --force — не спрашивать подтверждения при деструктивных изменениях
-run_as "cd $APP_DIR && set -a && . ./.env && set +a && pnpm exec drizzle-kit push --force && node --env-file=.env --import tsx/esm src/db/migrate-search.ts"
+# push --force — не спрашивать подтверждения при деструктивных изменениях.
+# Миграция поиска — через CLI tsx: `node --import tsx/esm` падает на Node 22
+# с ERR_REQUIRE_CYCLE_MODULE для CJS-пакетов (без "type": "module")
+run_as "cd $APP_DIR && set -a && . ./.env && set +a && pnpm exec drizzle-kit push --force && pnpm exec tsx src/db/migrate-search.ts"
 
 FIRST_DEPLOY="no"
 if [ "$SEED" = "1" ]; then

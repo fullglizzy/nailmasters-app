@@ -40,7 +40,7 @@ sudo bash deploy/deploy.sh nailmasters.ru admin@nailmasters.ru
 Скрипт сам:
 1. ставит пакеты (nginx, postgresql, redis, certbot, node 22, pm2, pnpm);
 2. создаёт пользователя `deploy` и каталог `/opt/nailmasters`;
-3. клонирует репозиторий (ветка `main`, переопределяется через `BRANCH`);
+3. клонирует репозиторий (ветка `refactor/v3`, переопределяется через `BRANCH`);
 4. создаёт `.env` со сгенерированными секретами (JWT, пароль БД) — **выводит
    `ADMIN_REGISTRATION_SECRET` в консоль**: он нужен для первой регистрации
    администратора в приложении;
@@ -69,11 +69,11 @@ cd /opt/nailmasters && git pull  # локально — просто сдела�
 sudo bash /opt/nailmasters/deploy/deploy.sh
 ```
 
-Скрипт подтянет изменения из `origin/main`, переустановит зависимости,
+Скрипт подтянет изменения из `origin/refactor/v3`, переустановит зависимости,
 применит изменения схемы, пересоберёт standalone и перезапустит PM2.
 `.env`, база и загруженные файлы при этом сохраняются.
 
-Деплой другой ветки: `BRANCH=refactor/v3 sudo bash /opt/nailmasters/deploy/deploy.sh`
+Деплой другой ветки (например, стабильной): `BRANCH=main sudo bash /opt/nailmasters/deploy/deploy.sh`
 
 Если тестовый деплой был запущен без домена, домен и SSL добавляются тем же
 скриптом (повторный запуск не трогает `.env` и базу):

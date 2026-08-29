@@ -184,8 +184,8 @@ SEED=1 sudo bash deploy/deploy.sh ваш-домен.ru admin@ваш-домен.r
 # обновление из репозитория
 sudo bash /opt/nailmasters/deploy/deploy.sh
 
-# деплой другой ветки
-BRANCH=refactor/v3 sudo bash /opt/nailmasters/deploy/deploy.sh
+# деплой другой ветки (по умолчанию деплоится refactor/v3)
+BRANCH=main sudo bash /opt/nailmasters/deploy/deploy.sh
 ```
 
 ## Переменные окружения
