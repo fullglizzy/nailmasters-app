@@ -3,8 +3,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2, Sparkles, Plus, X, Upload, Hash, Eye, Play } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
+import { designKeys } from '@/hooks/api';
 import { captureVideoFrame } from '@/lib/video-thumbnail';
 import Link from 'next/link';
 
@@ -45,6 +47,7 @@ export default function CreateDesignPage() {
 }
 
 function CreateDesignForm({ ensureAuth, router }: { ensureAuth: () => Promise<{ token: string; isGuest: boolean } | null>; router: ReturnType<typeof useRouter> }) {
+  const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -268,6 +271,9 @@ function CreateDesignForm({ ensureAuth, router }: { ensureAuth: () => Promise<{ 
       });
       const json = await res.json();
       if (json.success) {
+        // Сбросить кэш списков дизайнов — иначе /explore с staleTime=60s
+        // покажет старую ленту без свежесозданного дизайна
+        queryClient.invalidateQueries({ queryKey: designKeys.lists() });
         router.push(`/explore/${json.data.id}`);
       } else {
         setError(json.error || 'Ошибка создания');
