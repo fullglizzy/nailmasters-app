@@ -74,19 +74,17 @@ export function AppHeader() {
             </Link>
           )}*/}
           {isAuthenticated && <NotificationBell />}
-          {isAuthenticated && (
-            <Link
-              href="/profile"
-              aria-label="Профиль"
-              className={`flex h-9 w-9 items-center justify-center rounded-full transition-all ${
-                pathname === '/profile'
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
-              }`}
-            >
-              <User className="h-[18px] w-[18px]" />
-            </Link>
-          )}
+          <Link
+            href={isAuthenticated ? '/profile' : '/auth'}
+            aria-label={isAuthenticated ? 'Профиль' : 'Войти'}
+            className={`flex h-9 w-9 items-center justify-center rounded-full transition-all ${
+              pathname === '/profile'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
+            }`}
+          >
+            <User className="h-[18px] w-[18px]" />
+          </Link>
           <ThemeToggle />
         </div>
       </div>
