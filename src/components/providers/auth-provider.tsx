@@ -22,7 +22,7 @@ export interface AuthContextValue {
   /** Устанавливает сессию из ответа API (login / register / register-guest). */
   login: (data: { token: string; refreshToken?: string; user: UserProfile }) => void;
   /** Сбрасывает сессию и удаляет refreshToken cookie на сервере. */
-  logout: () => void;
+  logout: () => Promise<void>;
   /** Возвращает текущий access-токен из памяти (ref), без ре-рендеров. */
   getToken: () => string | null;
   /**
@@ -53,6 +53,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // accessToken живёт в ref — не в state, чтобы не триггерить ре-рендеры
   const tokenRef = useRef<string | null>(null);
 
+  // Защита от гонки logout ↔ syncSession/ensureAuth:
+  // любой запрос сессии, начатый до logout, не должен вернуть пользователя.
+  const authEpochRef = useRef(0);
+  const isLoggingOutRef = useRef(false);
+
   // Регистрируем геттер токена для lib/api синхронно при первом рендере,
   // до монтирования детей — чтобы их запросы сразу видели токен.
   const registeredRef = useRef(false);
@@ -65,6 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     (data: { token: string; refreshToken?: string; user: UserProfile }) => {
+      authEpochRef.current += 1;
+      isLoggingOutRef.current = false;
       tokenRef.current = data.token;
       setUser(data.user);
       if (typeof window !== 'undefined') {
@@ -74,22 +81,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Инвалидируем все in-flight проверки сессии и блокируем создание гостя
+    authEpochRef.current += 1;
+    isLoggingOutRef.current = true;
     tokenRef.current = null;
     setUser(null);
-    // Удаляем refreshToken cookie на сервере (не блокируем UI)
-    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('auth-change'));
+    try {
+      // Ждём удаления httpOnly refresh-cookie: иначе syncSession успеет
+      // восстановить пользователя по ещё живой cookie (баг «со второго клика»).
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      // Даже если сеть недоступна, локально сессия уже сброшена
+    } finally {
+      isLoggingOutRef.current = false;
     }
   }, []);
 
   const ensureAuth = useCallback(async (): Promise<{ token: string; isGuest: boolean } | null> => {
     if (tokenRef.current) return { token: tokenRef.current, isGuest: user?.isGuest ?? false };
+    if (isLoggingOutRef.current) return null;
+    const epoch = authEpochRef.current;
     try {
       const res = await fetch('/api/auth/register-guest', { method: 'POST', credentials: 'include' });
       const json = await res.json();
-      if (json.success && json.data?.token) {
+      if (json.success && json.data?.token && epoch === authEpochRef.current) {
         login({ token: json.data.token, refreshToken: json.data.refreshToken, user: json.data.user });
         return { token: json.data.token, isGuest: json.data.user?.isGuest ?? true };
       }
@@ -104,12 +124,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // НЕ сбрасываем существующий auth при ошибке/отсутствии сессии —
   // только подтверждаем или обновляем.
   const syncSession = useCallback(async (): Promise<void> => {
+    if (isLoggingOutRef.current) return;
+    const epoch = authEpochRef.current;
     try {
       const headers: Record<string, string> = {};
       if (tokenRef.current) headers['Authorization'] = `Bearer ${tokenRef.current}`;
       const res = await fetch('/api/auth/session', { headers, credentials: 'include' });
       const json = await res.json();
-      if (json.success && json.data?.user) {
+      if (json.success && json.data?.user && epoch === authEpochRef.current) {
         tokenRef.current = json.data.token ?? tokenRef.current;
         setUser(json.data.user);
       }

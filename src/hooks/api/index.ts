@@ -3,4 +3,4 @@ export { useDesigns, useDesign, usePopularDesigns, useLikedDesigns, useDesignMas
 export { useMasters, useMaster, useMasterDesigns, useMasterServices, useMasterSchedule, useAvailableSlots, useMasterReviews, useMyReviews, useSearchMasters, masterKeys } from './use-masters';
 export { useOrders, orderKeys } from './use-orders';
 export { useProfile, useNotifications, profileKeys, notificationKeys } from './use-profile';
-export { useAdminStats, useAdminUsers, useAdminDesigns, useAdminOrders, adminKeys } from './use-admin';
+export { useAdminStats, useAdminUsers, useAdminDesigns, useAdminOrders, useAdminMasters, useAdminMaster, useCreateMaster, useUpdateMaster, useAddMasterService, useUpdateMasterService, useDeleteMasterService, useAddMasterSchedule, useDeleteMasterSchedule, adminKeys } from './use-admin';

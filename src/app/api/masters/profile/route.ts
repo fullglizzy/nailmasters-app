@@ -26,7 +26,8 @@ export const PUT = withAuth(async (req: NextRequest) => {
   if (!parsed.success) return errorResponse(parsed.error.errors.map(e => e.message).join('; '), 422);
 
   const updates = { ...parsed.data };
-  const { address, city } = parsed.data;
+  const { address, city, age } = parsed.data;
+  delete updates.age; // возраст живёт в users, не в master_profiles
 
   // Авто-геокодинг: если адрес изменился — получаем координаты
   if (address) {
@@ -53,5 +54,8 @@ export const PUT = withAuth(async (req: NextRequest) => {
     }
   }
   await db.update(schema.masterProfiles).set(dbUpdates).where(eq(schema.masterProfiles.userId, user.userId));
+  if (age !== undefined) {
+    await db.update(schema.users).set({ age }).where(eq(schema.users.id, user.userId));
+  }
   return successResponse(null, 'Профиль обновлен');
 });

@@ -4,6 +4,7 @@ import { and, eq, gte, lte } from 'drizzle-orm';
 import { successResponse, errorResponse } from '@/lib/response';
 import { withAuth, type AuthenticatedRequest } from '@/lib/api-middleware';
 import { logger } from '@/lib/logger';
+import { buildScheduleSlots, filterNewScheduleSlots } from '@/lib/schedule';
 import { z } from 'zod';
 
 const batchSchema = z.object({
@@ -13,18 +14,6 @@ const batchSchema = z.object({
   intervalMinutes: z.number().int().min(15, 'Минимум 15 мин').max(480, 'Максимум 480 мин').optional(),
   repeatDays: z.array(z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])).optional(),
 });
-
-const DAY_MAP: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 0 };
-
-function parseTime(t: string): { h: number; m: number } {
-  const [h, m] = t.split(':').map(Number);
-  return { h, m };
-}
-
-function toMinutes(t: string): number {
-  const { h, m } = parseTime(t);
-  return h * 60 + m;
-}
 
 /**
  * POST /api/masters/schedule/batch
@@ -52,66 +41,16 @@ export const POST = withAuth(async (req: NextRequest) => {
 
     const { workDate, startTime, endTime, intervalMinutes, repeatDays } = parsed.data;
 
-    // Валидация времени
-    const startMin = toMinutes(startTime);
-    const endMin = toMinutes(endTime);
-    const slotDuration = endMin - startMin;
-
-    if (slotDuration <= 0) {
-      return errorResponse('Время окончания должно быть позже времени начала', 422);
-    }
-
-    const interval = intervalMinutes || slotDuration;
-    if (interval > slotDuration) {
-      return errorResponse(`Интервал (${interval} мин) больше длительности слота (${slotDuration} мин)`, 422);
-    }
-
-    if (interval < 15) {
-      return errorResponse('Минимальный интервал — 15 минут', 422);
-    }
-
-    // Генерируем даты
-    const dates = [workDate];
-    if (repeatDays?.length) {
-      const baseDate = new Date(workDate);
-      const targetDays = repeatDays.map(d => DAY_MAP[d]);
-      for (let w = 1; w <= 4; w++) {
-        for (const targetDay of targetDays) {
-          const d = new Date(baseDate);
-          d.setDate(baseDate.getDate() + w * 7);
-          const diff = targetDay - d.getDay();
-          d.setDate(d.getDate() + (diff < 0 ? diff + 7 : diff));
-          const dateStr = d.toISOString().split('T')[0];
-          if (!dates.includes(dateStr)) dates.push(dateStr);
-        }
-      }
-    }
-
-    // Генерируем слоты
-    const slots: { workDate: string; startTime: string; endTime: string }[] = [];
-    for (const date of dates) {
-      let currentMin = startMin;
-      while (currentMin + interval <= endMin) {
-        const sH = Math.floor(currentMin / 60);
-        const sM = currentMin % 60;
-        const eH = Math.floor((currentMin + interval) / 60);
-        const eM = (currentMin + interval) % 60;
-        slots.push({
-          workDate: date,
-          startTime: `${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}`,
-          endTime: `${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}`,
-        });
-        currentMin += interval;
-      }
-    }
-
-    if (slots.length === 0) {
-      return errorResponse(`Не удалось создать слоты. Проверьте интервал (${interval} мин) — он может быть больше доступного времени.`, 422);
-    }
-
-    if (slots.length > 200) {
-      return errorResponse(`Слишком много слотов (${slots.length}). Максимум 200 за раз.`, 422);
-    }
+    const built = buildScheduleSlots({
+      startDate: workDate,
+      startTime,
+      endTime,
+      intervalMinutes,
+      repeatDays,
+      weeks: 4,
+    });
+    if (built.error) return errorResponse(built.error, 422);
+    const { slots, dates } = built;
 
     // Проверяем пересечения с существующими слотами
     const firstDate = dates[0];
@@ -129,37 +68,7 @@ export const POST = withAuth(async (req: NextRequest) => {
         lte(schema.schedules.workDate, lastDate),
       ));
 
-    // Нормализуем время — из БД приходит HH:MM:SS, генерируем HH:MM
-    // exactSet: точные дубликаты (та же дата + начало + конец)
-    const exactSet = new Set<string>();
-    // overlapMap: для проверки пересечений — по дате → список [startMin, endMin]
-    const overlapMap = new Map<string, [number, number][]>();
-    for (const s of existingSlots) {
-      const st = (s.startTime as string).slice(0, 5);
-      const et = (s.endTime as string).slice(0, 5);
-      exactSet.add(`${s.workDate}|${st}|${et}`);
-
-      const ranges = overlapMap.get(s.workDate) || [];
-      ranges.push([toMinutes(st), toMinutes(et)]);
-      overlapMap.set(s.workDate, ranges);
-    }
-
-    const newSlots = slots.filter(s => {
-      // Пропускаем точные дубликаты
-      if (exactSet.has(`${s.workDate}|${s.startTime}|${s.endTime}`)) return false;
-
-      // Проверяем пересечение по времени на ту же дату
-      const sStart = toMinutes(s.startTime);
-      const sEnd = toMinutes(s.endTime);
-      const ranges = overlapMap.get(s.workDate);
-      if (ranges) {
-        for (const [rStart, rEnd] of ranges) {
-          if (sStart < rEnd && sEnd > rStart) return false; // пересекается
-        }
-      }
-      return true;
-    });
-    const skipped = slots.length - newSlots.length;
+    const { newSlots, skipped } = filterNewScheduleSlots(existingSlots, slots);
 
     if (newSlots.length === 0) {
       return errorResponse(`Все ${slots.length} слотов уже существуют или пересекаются с существующими`, 409);

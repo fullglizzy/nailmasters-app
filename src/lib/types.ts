@@ -278,6 +278,39 @@ export interface OrderEnriched extends Order {
   _master?: { name: string; phone: string; address?: string; avatar?: string | null } | null;
 }
 
+// ── Admin: мастера ────────────────────────────────────────
+
+export interface AdminMasterListItem {
+  userId: string;
+  fullName: string;
+  phone: string;
+  city: string | null;
+  rating: string | number;
+  totalOrders: number;
+  isActive: boolean;
+  isModerated: boolean;
+  username: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+  blocked: boolean;
+}
+
+export interface AdminMasterDetails {
+  user: {
+    id: string;
+    phone: string | null;
+    email: string | null;
+    username: string | null;
+    avatarUrl: string | null;
+    age: number | null;
+    blocked: boolean;
+    createdAt: string | Date;
+  };
+  profile: Master;
+  services: Service[];
+  schedule: ScheduleSlot[];
+}
+
 // ── Comment ───────────────────────────────────────────────
 
 export interface Comment {

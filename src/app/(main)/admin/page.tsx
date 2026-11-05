@@ -7,13 +7,13 @@ import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Users, Palette, ShoppingBag, BarChart3, Shield, Search,
-  Star, Clock, TrendingUp
+  Star, Clock, TrendingUp, Plus, Pencil
 } from 'lucide-react';
-import { useAdminStats, useAdminUsers, useAdminDesigns, useAdminOrders } from '@/hooks/api';
-import { useMasters } from '@/hooks/api';
+import { useAdminStats, useAdminUsers, useAdminDesigns, useAdminOrders, useAdminMasters } from '@/hooks/api';
 import { useAuth } from '@/components/providers/auth-provider';
-import type { AdminUser, Design, OrderEnriched, Master } from '@/lib/types';
+import type { AdminUser, AdminMasterListItem, Design, OrderEnriched } from '@/lib/types';
 import { OrderDetailModal } from './order-detail-modal';
+import { MasterEditorModal } from './master-editor-modal';
 
 type Tab = 'overview' | 'users' | 'designs' | 'orders' | 'masters';
 
@@ -24,6 +24,9 @@ export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('overview');
   const [selectedOrder, setSelectedOrder] = useState<OrderEnriched | null>(null);
   const [search, setSearch] = useState('');
+  const [masterSearch, setMasterSearch] = useState('');
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingMasterId, setEditingMasterId] = useState<string | undefined>(undefined);
 
   const role = user?.role ?? '';
 
@@ -37,7 +40,7 @@ export default function AdminPage() {
   const { data: users = [] } = useAdminUsers(search);
   const { data: designs = [] } = useAdminDesigns();
   const { data: orders = [] } = useAdminOrders();
-  const { data: masters = [] } = useMasters({ limit: 100 });
+  const { data: masters = [], isLoading: mastersLoading } = useAdminMasters(masterSearch);
 
   const isLoading = statsLoading && role === 'admin';
 
@@ -61,6 +64,20 @@ export default function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'designs'] });
     }
   };
+
+  const renderMasterStatus = (m: AdminMasterListItem) => (
+    <div className="flex flex-wrap items-center gap-1">
+      {m.blocked && (
+        <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">Заблокирован</span>
+      )}
+      {!m.isActive && (
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Скрыт</span>
+      )}
+      <span className={`text-xs font-medium ${m.isModerated ? 'text-emerald-600' : 'text-amber-600'}`}>
+        {m.isModerated ? '✅ Проверен' : '⏳ На проверке'}
+      </span>
+    </div>
+  );
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>;
   if (role !== 'admin') return null;
@@ -210,26 +227,123 @@ export default function AdminPage() {
         {/* Masters */}
         {tab === 'masters' && (
           <div className="space-y-4">
-            <div className="rounded-xl border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50"><tr><th className="text-left p-3 font-medium">Мастер</th><th className="text-left p-3 font-medium">Город</th><th className="text-left p-3 font-medium">Рейтинг</th><th className="text-left p-3 font-medium">Заказов</th><th className="text-left p-3 font-medium">Статус</th></tr></thead>
-                <tbody>
-                  {masters.map((m: Master) => (
-                    <tr key={m.userId} className="border-t">
-                      <td className="p-3"><Link href={`/masters/${m.userId}`} className="font-medium hover:text-primary hover:underline">{m.fullName}</Link><div className="text-xs text-muted-foreground">{m.phone}</div></td>
-                      <td className="p-3">{m.city || '—'}</td>
-                      <td className="p-3"><span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />{String(m.rating)}</span></td>
-                      <td className="p-3">{m.totalOrders}</td>
-                      <td className="p-3">{m.isModerated ? <span className="text-xs text-emerald-600 font-medium">✅ Проверен</span> : <span className="text-xs text-amber-600 font-medium">⏳ На проверке</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+              <div className="relative flex-1 sm:max-w-sm">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={masterSearch}
+                  onChange={e => setMasterSearch(e.target.value)}
+                  placeholder="Поиск по имени, телефону, городу..."
+                  className="w-full rounded-lg border bg-background pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <button
+                onClick={() => { setEditingMasterId(undefined); setEditorOpen(true); }}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                <Plus className="h-4 w-4" />Создать мастера
+              </button>
             </div>
+
+            {mastersLoading && masters.length === 0 ? (
+              <div className="flex justify-center py-10">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : masters.length === 0 ? (
+              <div className="rounded-xl border border-dashed py-10 text-center text-sm text-muted-foreground">
+                Мастера не найдены
+              </div>
+            ) : (
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-3">
+                  {masters.map((m: AdminMasterListItem) => (
+                    <div key={m.userId} className="rounded-xl border bg-card p-4 space-y-2.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <Link href={`/masters/${m.userId}`} className="font-medium hover:text-primary hover:underline truncate block">
+                            {m.fullName}
+                          </Link>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {m.phone}{m.username ? ` · @${m.username}` : ''}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => { setEditingMasterId(m.userId); setEditorOpen(true); }}
+                          aria-label="Редактировать мастера"
+                          className="shrink-0 rounded-full bg-primary/10 p-2 text-primary hover:bg-primary/20 transition-colors"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span>{m.city || '—'}</span>
+                        <span className="flex items-center gap-1">
+                          <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />{String(m.rating)}
+                        </span>
+                        <span>{m.totalOrders} заказов</span>
+                      </div>
+                      {renderMasterStatus(m)}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop table */}
+                <div className="hidden md:block rounded-xl border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left p-3 font-medium">Мастер</th>
+                        <th className="text-left p-3 font-medium">Город</th>
+                        <th className="text-left p-3 font-medium">Рейтинг</th>
+                        <th className="text-left p-3 font-medium">Заказов</th>
+                        <th className="text-left p-3 font-medium">Статус</th>
+                        <th className="text-right p-3 font-medium">Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {masters.map((m: AdminMasterListItem) => (
+                        <tr key={m.userId} className="border-t">
+                          <td className="p-3">
+                            <Link href={`/masters/${m.userId}`} className="font-medium hover:text-primary hover:underline">{m.fullName}</Link>
+                            <div className="text-xs text-muted-foreground">
+                              {m.phone}{m.username ? ` · @${m.username}` : ''}
+                            </div>
+                          </td>
+                          <td className="p-3">{m.city || '—'}</td>
+                          <td className="p-3">
+                            <span className="flex items-center gap-1">
+                              <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />{String(m.rating)}
+                            </span>
+                          </td>
+                          <td className="p-3">{m.totalOrders}</td>
+                          <td className="p-3">{renderMasterStatus(m)}</td>
+                          <td className="p-3 text-right">
+                            <button
+                              onClick={() => { setEditingMasterId(m.userId); setEditorOpen(true); }}
+                              className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+                            >
+                              Редактировать
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
     </div>
     <OrderDetailModal order={selectedOrder} open={!!selectedOrder} onClose={() => setSelectedOrder(null)} />
+    <MasterEditorModal
+      open={editorOpen}
+      mode={editingMasterId ? 'edit' : 'create'}
+      masterId={editingMasterId}
+      onClose={() => setEditorOpen(false)}
+      onSaved={() => {}}
+    />
   </>);
 }

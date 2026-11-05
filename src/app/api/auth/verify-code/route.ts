@@ -6,8 +6,10 @@ import { successResponse, errorResponse } from '@/lib/response';
 import { withRateLimit } from '@/lib/api-middleware';
 import { logger } from '@/lib/logger';
 import { v4 as uuid } from 'uuid';
+import { envInt } from '@/lib/env';
 
-const MAX_ATTEMPTS_PER_CODE = 5;
+// 0 — без ограничения попыток. Настраивается через .env.
+const MAX_ATTEMPTS_PER_CODE = envInt('SMS_CODE_MAX_ATTEMPTS', 5);
 
 // POST /api/auth/verify-code — подтвердить код (rate-limited, brute-force protected)
 export const POST = withRateLimit('auth')(async (req: NextRequest) => {
@@ -39,7 +41,7 @@ export const POST = withRateLimit('auth')(async (req: NextRequest) => {
     const currentCode = recentCode[0];
 
     // ── Блокировка по числу попыток подбора ЭТОГО кода ──
-    if (currentCode.attempts >= MAX_ATTEMPTS_PER_CODE) {
+    if (MAX_ATTEMPTS_PER_CODE > 0 && currentCode.attempts >= MAX_ATTEMPTS_PER_CODE) {
       // Инвалидируем код — больше не принимаем попытки
       await db.update(schema.smsCodes).set({ used: true }).where(eq(schema.smsCodes.id, currentCode.id));
       logger.warn({ phone, codeId: currentCode.id }, 'Code invalidated after max attempts');
@@ -73,7 +75,9 @@ export const POST = withRateLimit('auth')(async (req: NextRequest) => {
 
   const hasName = !!body.fullName?.trim();
   let user: typeof schema.users.$inferSelect;
-  const role = body.role || 'client';
+  // Через OTP можно стать только клиентом или мастером.
+  // Админские аккаунты создаются исключительно через /api/auth/register-admin.
+  const role = body.role === 'nailmaster' ? 'nailmaster' : 'client';
   const username = `user_${uuid().slice(0, 8)}`;
   let isNew = true; // новый пользователь или конвертация гостя
 

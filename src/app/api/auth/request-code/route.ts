@@ -5,6 +5,11 @@ import { successResponse, errorResponse } from '@/lib/response';
 import { withRateLimit } from '@/lib/api-middleware';
 import { sendSmsCode } from '@/lib/sms';
 import { logger } from '@/lib/logger';
+import { envInt } from '@/lib/env';
+
+// 0 — без ограничения. Настраивается через .env без правки кода.
+const DAILY_LIMIT = envInt('SMS_CODE_DAILY_LIMIT', 10);
+const RESEND_COOLDOWN_MS = envInt('SMS_CODE_RESEND_SECONDS', 60) * 1000;
 
 // POST /api/auth/request-code — запросить SMS-код (rate-limited)
 export const POST = withRateLimit('auth')(async (req: NextRequest) => {
@@ -22,7 +27,7 @@ export const POST = withRateLimit('auth')(async (req: NextRequest) => {
       .select({ count: sql<number>`COUNT(*)::int` })
       .from(schema.smsCodes)
       .where(and(eq(schema.smsCodes.phone, phone), gt(schema.smsCodes.createdAt, dayAgo)));
-    if ((dayCount?.count ?? 0) >= 10) {
+    if (DAILY_LIMIT > 0 && (dayCount?.count ?? 0) >= DAILY_LIMIT) {
       return errorResponse('Слишком много запросов. Попробуйте завтра.', 429);
     }
 
@@ -37,8 +42,8 @@ export const POST = withRateLimit('auth')(async (req: NextRequest) => {
       ))
       .limit(1);
 
-    if (recent.length > 0) {
-      const remaining = Math.ceil((recent[0].createdAt.getTime() + 60_000 - Date.now()) / 1000);
+    if (RESEND_COOLDOWN_MS > 0 && recent.length > 0) {
+      const remaining = Math.ceil((recent[0].createdAt.getTime() + RESEND_COOLDOWN_MS - Date.now()) / 1000);
       if (remaining > 0) return errorResponse(`Код уже отправлен. Повторите через ${remaining} сек`, 429);
     }
 

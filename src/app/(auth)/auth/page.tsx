@@ -4,15 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { Shield, Loader2, Check, Smartphone, User, Sparkles, MapPin, ArrowRight } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/providers/auth-provider';
+import { PhoneInput } from '@/components/shared/phone-input';
+import { US_PHONE_LENGTH } from '@/lib/phone';
 import type { UserProfile } from '@/lib/types';
-
-/* ──────────────────────────────────────────────
-   Country codes
-   ────────────────────────────────────────────── */
-
-const PHONE_CODES: Record<string, { length: number; placeholder: string; flag: string }> = {
-  '+1': { length: 10, placeholder: '(555) 123-4567', flag: '🇺🇸' },
-};
 
 /* ──────────────────────────────────────────────
    Pending booking context (sessionStorage)
@@ -54,6 +48,12 @@ const inputClass =
 
 type Step = 'phone' | 'code' | 'name';
 
+interface DemoAccount {
+  role: 'admin' | 'client' | 'nailmaster';
+  label: string;
+  phone: string;
+}
+
 export default function AuthPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -79,6 +79,9 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [codeExpiry, setCodeExpiry] = useState(0);
+  const [demoAccounts, setDemoAccounts] = useState<DemoAccount[]>([]);
+  const [demoCode, setDemoCode] = useState('000000');
+  const [demoLoading, setDemoLoading] = useState<string | null>(null);
 
   const codeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const formTopRef = useRef<HTMLDivElement>(null);
@@ -107,105 +110,20 @@ export default function AuthPage() {
     return () => clearInterval(t);
   }, [codeExpiry]);
 
-  /* ── Phone mask ─────────────────────────── */
+  /* ── Тестовые учётки для быстрого входа ─── */
 
-  const phoneInputRef = useRef<HTMLInputElement>(null);
-
-  // Format raw digits → (XXX) XXX-XXXX
-  const formatPhone = (digits: string) => {
-    const d = digits.slice(0, 10);
-    if (d.length === 0) return '';
-    if (d.length <= 3) return `(${d}`;
-    if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
-    return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-  };
-
-  // Get raw digits from formatted or raw input
-  const getDigits = (val: string) => val.replace(/\D/g, '').slice(0, 10);
-
-  // Calculate cursor position after formatting
-  const getCursorPos = (oldVal: string, newVal: string, oldPos: number, digitsAdded: number) => {
-    // Count how many mask chars were added before the cursor
-    const oldMaskBefore = oldVal.slice(0, oldPos).replace(/\d/g, '').length;
-    const digitPos = oldPos - oldMaskBefore + digitsAdded;
-    // Find where that digit position lands in the formatted string
-    let digitCount = 0;
-    for (let i = 0; i < newVal.length; i++) {
-      if (/\d/.test(newVal[i])) {
-        if (digitCount === digitPos) return i + 1;
-        digitCount++;
-      }
-    }
-    return newVal.length;
-  };
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const input = e.target;
-    const oldDigits = getDigits(phone);
-    const newDigits = getDigits(input.value);
-    const rule = PHONE_CODES[countryCode] || PHONE_CODES['+1'];
-
-    if (newDigits.length > rule.length) return; // block overflow
-
-    const formatted = formatPhone(newDigits);
-    const added = newDigits.length - oldDigits.length;
-    const cursorPos = getCursorPos(phone, formatted, input.selectionStart || 0, added > 0 ? added : 0);
-
-    setPhone(formatted);
-
-    // Restore cursor after React re-render
-    requestAnimationFrame(() => {
-      if (phoneInputRef.current) {
-        phoneInputRef.current.setSelectionRange(cursorPos, cursorPos);
-      }
-    });
-  };
-
-  // Handle backspace/delete through mask characters
-  const handlePhoneKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      requestCode();
-      return;
-    }
-
-    if (e.key === 'Backspace' || e.key === 'Delete') {
-      const input = e.currentTarget;
-      const cursorPos = input.selectionStart || 0;
-      const charBefore = phone[cursorPos - 1];
-
-      // If the character before cursor is a mask char, skip over it
-      if (e.key === 'Backspace' && charBefore && !/\d/.test(charBefore)) {
-        e.preventDefault();
-        const before = phone.slice(0, cursorPos - 1);
-        const after = phone.slice(cursorPos);
-        const newDigits = getDigits(before + after);
-        const formatted = formatPhone(newDigits);
-        const newPos = cursorPos - 1;
-        // Count non-digit chars before position to adjust
-        let digitCount = 0;
-        for (let i = 0; i < Math.min(newPos, formatted.length); i++) {
-          if (/\d/.test(formatted[i])) digitCount++;
-        }
-        setPhone(formatted);
-        requestAnimationFrame(() => {
-          if (phoneInputRef.current) {
-            // Put cursor right after the last digit before the original position
-            let pos = 0;
-            let count = 0;
-            const targetDigits = getDigits(phone.slice(0, cursorPos)).length - 1;
-            for (let i = 0; i < formatted.length; i++) {
-              if (/\d/.test(formatted[i])) {
-                if (count === targetDigits) { pos = i + 1; break; }
-                count++;
-              }
-            }
-            phoneInputRef.current.setSelectionRange(pos || formatted.length, pos || formatted.length);
-          }
-        });
-      }
-    }
-  };
+  useEffect(() => {
+    let active = true;
+    fetch('/api/auth/demo-accounts', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (!active || !json.success || !json.data?.enabled) return;
+        setDemoAccounts(json.data.accounts || []);
+        setDemoCode(json.data.code || '000000');
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   /* ── API helper ─────────────────────────── */
 
@@ -245,6 +163,38 @@ export default function AuthPage() {
       refreshToken: data.refreshToken,
       user: data.user as unknown as UserProfile,
     });
+  };
+
+  /* ── Быстрый вход за тестовую учётку ─────── */
+
+  const quickLogin = async (account: DemoAccount) => {
+    if (demoLoading || loading) return;
+    setDemoLoading(account.role);
+    setError('');
+    try {
+      const sendRes = await fetch('/api/auth/request-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: account.phone }),
+      });
+      const sendJson = await sendRes.json();
+      if (!sendJson.success) throw new Error(sendJson.error || 'Не удалось получить код');
+
+      const verifyRes = await fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: account.phone, code: demoCode, role: account.role }),
+      });
+      const verifyJson = await verifyRes.json();
+      if (!verifyJson.success) throw new Error(verifyJson.error || 'Не удалось войти');
+
+      persistAuth(verifyJson.data);
+      router.replace(account.role === 'admin' ? '/admin' : '/profile');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка быстрого входа');
+    } finally {
+      setDemoLoading(null);
+    }
   };
 
   /* ── Complete new-user registration ─────── */
@@ -317,10 +267,9 @@ export default function AuthPage() {
 
   const requestCode = async () => {
     const digits = phone.replace(/\D/g, '');
-    const rule = PHONE_CODES[countryCode] || PHONE_CODES['+1'];
 
-    if (digits.length !== rule.length) {
-      setError(`Введите номер телефона полностью (${rule.length} цифр)`);
+    if (digits.length !== US_PHONE_LENGTH) {
+      setError(`Введите номер телефона полностью (${US_PHONE_LENGTH} цифр)`);
       return;
     }
 
@@ -511,28 +460,15 @@ export default function AuthPage() {
                   <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
                     Номер телефона
                   </label>
-                  <div className="flex gap-2">
-                    <select
-                      value={countryCode}
-                      onChange={(e) => { setCountryCode(e.target.value); setPhone(''); }}
-                      className="w-[4.5rem] rounded-xl border border-border/60 bg-background px-2 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 appearance-none cursor-pointer"
-                    >
-                      {Object.entries(PHONE_CODES).map(([cd, rule]) => (
-                        <option key={cd} value={cd}>{rule.flag} {cd}</option>
-                      ))}
-                    </select>
-                    <input
-                      ref={phoneInputRef}
-                      value={phone}
-                      onChange={handlePhoneChange}
-                      onKeyDown={handlePhoneKeyDown}
-                      type="tel"
-                      autoFocus
-                      className={`flex-1 ${inputClass}`}
-                      placeholder={PHONE_CODES[countryCode]?.placeholder || '(555) 123-4567'}
-                      inputMode="numeric"
-                    />
-                  </div>
+                  <PhoneInput
+                    value={phone}
+                    onChange={setPhone}
+                    countryCode={countryCode}
+                    onCountryCodeChange={(code) => { setCountryCode(code); setPhone(''); }}
+                    onEnter={requestCode}
+                    autoFocus
+                    inputClassName={`flex-1 ${inputClass}`}
+                  />
                 </div>
 
                 <button
@@ -548,6 +484,39 @@ export default function AuthPage() {
                 <p className="text-center text-[11px] text-muted-foreground/60">
                   Отправим 6-значный код для подтверждения. Без спама, без паролей.
                 </p>
+
+                {demoAccounts.length > 0 && (
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-border/60" />
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Тестовый вход
+                      </span>
+                      <div className="h-px flex-1 bg-border/60" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {demoAccounts.map((account) => (
+                        <button
+                          key={account.role}
+                          type="button"
+                          onClick={() => quickLogin(account)}
+                          disabled={!!demoLoading || loading}
+                          className="flex flex-col items-center justify-center gap-1 rounded-xl border border-border/60 py-2.5 text-xs font-medium hover:bg-accent disabled:opacity-50 transition-colors"
+                        >
+                          {account.role === 'admin'
+                            ? <Shield className="h-4 w-4" />
+                            : account.role === 'nailmaster'
+                              ? <Sparkles className="h-4 w-4" />
+                              : <User className="h-4 w-4" />}
+                          {demoLoading === account.role ? 'Вход...' : account.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-center text-[11px] text-muted-foreground/60">
+                      Быстрый вход для тестовых учётных записей
+                    </p>
+                  </div>
+                )}
               </div>
             </>
           )}

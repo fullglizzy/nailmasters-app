@@ -4,24 +4,27 @@ import { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { User, Heart, Calendar, LogOut, Upload, Star, Clock, ShoppingBag, Grid3X3, Edit, MessageSquare, Eye, Sparkles } from 'lucide-react';
+import { User, Heart, LogOut, Upload, Star, Clock, ShoppingBag, Grid3X3, Edit, MessageSquare, Eye, Sparkles } from 'lucide-react';
 import { FavoritesTab } from '@/components/profile/favorites-tab';
 import { BookingsTab } from '@/components/profile/bookings-tab';
 import { UploadsTab } from '@/components/profile/uploads-tab';
 import { ReviewsTab } from '@/components/profile/reviews-tab';
 import { EditProfileModal } from '@/components/profile/edit-profile-modal';
+import { ScheduleEditor } from '@/components/master/schedule-editor';
 import { DesignCard } from '@/components/design/design-card';
 import { ScrollableRow } from '@/components/shared/scrollable-row';
 import { useProfile, useMasterDesigns } from '@/hooks/api';
 import { useLikedIds } from '@/hooks/use-liked-ids';
 import { useAuth } from '@/components/providers/auth-provider';
-import { pluralRu } from '@/lib/utils';
+import { apiGet, apiPost, apiDelete } from '@/lib/api';
+import { formatPhoneDisplay } from '@/lib/phone';
 import type { Design, ScheduleSlot } from '@/lib/types';
 
 function ProfileContent() {
   const [editOpen, setEditOpen] = useState(false);
-  const [scheduleKey, setScheduleKey] = useState(0);
   const [showMasterConfirm, setShowMasterConfirm] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const didLogoutRef = useRef(false);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -32,12 +35,21 @@ function ProfileContent() {
 
   const { data: profile, isLoading, refetch } = useProfile();
 
-  const handleLogout = () => logout();
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    didLogoutRef.current = true;
+    // logout() ждёт удаления refresh-cookie; только потом уходим на главную
+    await logout();
+    router.replace('/');
+  };
 
   // Лениво создаём гостя при первом заходе в профиль без сессии.
   // Только один раз, только после того как syncSession подтвердил отсутствие сессии.
+  // После явного выхода гостя не создаём — иначе logout отменяет сам себя.
   const profileEnsured = useRef(false);
   useEffect(() => {
+    if (didLogoutRef.current) return;
     if (authLoading || profileEnsured.current) return;
     if (profile !== undefined) return; // уже есть профиль
     // useProfile завершился (enabled=false → data=undefined), сессии нет → создаём гостя
@@ -112,7 +124,7 @@ function ProfileContent() {
               <p className="text-sm text-muted-foreground">@{profile.username}</p>
               <div className="flex items-center gap-3 mt-1.5 text-sm text-muted-foreground">
                 <span className="capitalize">{isMaster ? 'Мастер' : isClient ? 'Клиент' : 'Администратор'}</span>
-                {profile.phone && <span>· {profile.phone}</span>}
+                {profile.phone && <span>· {formatPhoneDisplay(profile.phone)}</span>}
                 {isMaster && profile.rating && (
                   <span className="inline-flex items-center gap-1 font-medium text-gold"><Star className="h-3.5 w-3.5 fill-current" />{profile.rating}</span>
                 )}
@@ -125,8 +137,8 @@ function ProfileContent() {
                   <button onClick={() => setEditOpen(true)} className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2 text-sm font-medium hover:bg-surface transition-colors">
                     <Edit className="h-4 w-4" /> Редактировать
                   </button>
-                  <button onClick={handleLogout} className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2 text-sm font-medium hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors">
-                    <LogOut className="h-4 w-4" /> Выйти
+                  <button onClick={handleLogout} disabled={loggingOut} className="flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2 text-sm font-medium hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 disabled:opacity-50 transition-colors">
+                    <LogOut className="h-4 w-4" /> {loggingOut ? 'Выход...' : 'Выйти'}
                   </button>
                 </>
               )}
@@ -197,19 +209,13 @@ function ProfileContent() {
           {tab === 'orders' && <BookingsTab />}
           {tab === 'favorites' && <FavoritesTab />}
           {isMaster && tab === 'designs' && <MasterDesignsTab userId={profile.id} />}
-          {isMaster && tab === 'schedule' && <MasterScheduleTab key={scheduleKey} onAdd={async (date, start, end) => {
-            const token = getToken();
-            await fetch('/api/masters/schedule', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ workDate: date, startTime: start, endTime: end }),
-            });
-            setScheduleKey(k => k + 1);
-          }} onDelete={async (slotId) => {
-            const token = getToken();
-            await fetch(`/api/masters/schedule/${slotId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-            setScheduleKey(k => k + 1);
-          }} />}
+          {isMaster && tab === 'schedule' && (
+            <ScheduleEditor
+              loadSlots={() => apiGet<ScheduleSlot[]>('/api/masters/schedule')}
+              addBatch={(values) => apiPost('/api/masters/schedule/batch', values)}
+              deleteSlot={(slotId) => apiDelete(`/api/masters/schedule/${slotId}`)}
+            />
+          )}
           {tab === 'overview' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {tabs.filter(t => t.id !== 'overview').map(t => (
@@ -336,212 +342,6 @@ function MasterDesignsTab({ userId }: { userId: string }) {
 }
 
 // Master schedule management tab
-function MasterScheduleTab({ onAdd, onDelete }: { onAdd?: (date: string, start: string, end: string) => Promise<void>; onDelete?: (slotId: string) => Promise<void> }) {
-  const { getToken } = useAuth();
-  const [slots, setSlots] = useState<ScheduleSlot[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  // Batch add state
-  const [showAdd, setShowAdd] = useState(false);
-  const [batchDate, setBatchDate] = useState(new Date().toISOString().split('T')[0]);
-  const [batchStart, setBatchStart] = useState('09:00');
-  const [batchEnd, setBatchEnd] = useState('17:00');
-  const [batchInterval, setBatchInterval] = useState(60);
-  const [batchDays, setBatchDays] = useState<string[]>([]);
-  const [batchLoading, setBatchLoading] = useState(false);
-  const [batchError, setBatchError] = useState('');
-
-  useEffect(() => {
-    const token = getToken();
-    if (!token) { setLoading(false); return; }
-    setLoading(true);
-    fetch('/api/masters/schedule', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(j => { if (j.success) setSlots(j.data); })
-      .finally(() => setLoading(false));
-  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleBatchAdd = async () => {
-    const token = getToken();
-    if (!token) return;
-    setBatchLoading(true);
-    setBatchError('');
-    try {
-      const res = await fetch('/api/masters/schedule/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          workDate: batchDate,
-          startTime: batchStart,
-          endTime: batchEnd,
-          intervalMinutes: batchInterval,
-          repeatDays: batchDays.length ? batchDays : undefined,
-        }),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setShowAdd(false);
-        setRefreshKey(k => k + 1);
-      } else {
-        setBatchError(json.error || `Ошибка: ${res.status}`);
-      }
-    } catch {
-      setBatchError('Ошибка соединения');
-    } finally { setBatchLoading(false); }
-  };
-
-  const handleDelete = async (id: string) => {
-    setDeletingId(id);
-    try {
-      const token = getToken();
-      await fetch(`/api/masters/schedule/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token!}` },
-      });
-      setRefreshKey(k => k + 1);
-    } catch {} finally { setDeletingId(null); }
-  };
-
-  const toggleDay = (day: string) => {
-    setBatchDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
-  };
-
-  if (loading) return <div className="flex justify-center py-10"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>;
-
-  // Group + sort
-  const grouped: Record<string, ScheduleSlot[]> = {};
-  slots.forEach((s) => { (grouped[s.workDate] ??= []).push(s); });
-  const sortedDates = Object.keys(grouped).sort();
-  const statusColor = (status: string) => status === 'booked' ? 'bg-destructive/10 border-destructive/20 text-destructive' : status === 'blocked' ? 'bg-muted border-border/40 text-muted-foreground' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600';
-  const statusDot = (status: string) => status === 'booked' ? '🔴' : status === 'blocked' ? '⚫' : '🟢';
-
-  const inputClass = "rounded-xl border border-border/60 bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all w-full";
-  const chipClass = (active: boolean) => `rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${active ? 'bg-primary text-primary-foreground border-primary' : 'border-border/60 text-muted-foreground hover:bg-surface'}`;
-
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{slots.length} {pluralRu(slots.length, 'слот', 'слота', 'слотов')}</p>
-        <div className="flex gap-2">
-          <button onClick={() => setShowAdd(!showAdd)}
-            className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
-            {showAdd ? 'Отмена' : '+ Добавить'}
-          </button>
-        </div>
-      </div>
-
-      {/* Batch add form */}
-      {showAdd && (
-        <div className="rounded-2xl border border-border/40 bg-card p-5 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-          {batchError && (
-            <div className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{batchError}</div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Дата</label>
-              <input type="date" value={batchDate} onChange={e => setBatchDate(e.target.value)} className={inputClass} />
-            </div>
-            <div></div>
-            <div>
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Начало</label>
-              <input type="time" value={batchStart} onChange={e => setBatchStart(e.target.value)} className={inputClass} />
-            </div>
-            <div>
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1">Конец</label>
-              <input type="time" value={batchEnd} onChange={e => setBatchEnd(e.target.value)} className={inputClass} />
-            </div>
-          </div>
-
-          {/* Duration quick-select */}
-          <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">Длительность слота</label>
-            <div className="flex gap-2">
-              {[30, 60, 90, 120].map(m => (
-                <button key={m} onClick={() => setBatchInterval(m)}
-                  className={chipClass(batchInterval === m)}>{m} мин</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Repeat days */}
-          <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block mb-1.5">Повторить по дням</label>
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                { key: 'mon', label: 'Пн' }, { key: 'tue', label: 'Вт' }, { key: 'wed', label: 'Ср' },
-                { key: 'thu', label: 'Чт' }, { key: 'fri', label: 'Пт' }, { key: 'sat', label: 'Сб' }, { key: 'sun', label: 'Вс' },
-              ].map(d => (
-                <button key={d.key} onClick={() => toggleDay(d.key)}
-                  className={chipClass(batchDays.includes(d.key))}>{d.label}</button>
-              ))}
-            </div>
-          </div>
-
-          <button onClick={handleBatchAdd} disabled={batchLoading}
-            className="w-full rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-all">
-            {batchLoading ? 'Создание...' : 'Создать слоты'}
-          </button>
-        </div>
-      )}
-
-      {/* Slots grouped by date */}
-      {sortedDates.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-          <Calendar className="h-8 w-8 mb-2 opacity-30" />
-          <p className="text-sm">Нет слотов</p>
-          <p className="text-xs opacity-60 mt-1">Добавьте слоты чтобы клиенты могли записаться</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {sortedDates.map(date => {
-            const daySlots = grouped[date];
-            const dateObj = new Date(date);
-            const isToday = date === new Date().toISOString().split('T')[0];
-            const label = isToday ? 'Сегодня' : dateObj.toLocaleDateString('ru', { weekday: 'short', day: 'numeric', month: 'short' });
-            const isExpanded = expandedDate === date;
-
-            return (
-              <div key={date} className="rounded-xl border border-border/30 bg-card overflow-hidden">
-                <button
-                  onClick={() => setExpandedDate(isExpanded ? null : date)}
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-accent/20 transition-colors text-left"
-                >
-                  <span className="text-sm font-semibold">{label}</span>
-                  <span className="text-xs text-muted-foreground">{daySlots.length} {pluralRu(daySlots.length, 'слот', 'слота', 'слотов')}</span>
-                </button>
-                {isExpanded && (
-                  <div className="border-t border-border/20 divide-y divide-border/10">
-                    {daySlots.sort((a, b) => a.startTime.localeCompare(b.startTime)).map(s => (
-                      <div key={s.id}
-                        className={`flex items-center justify-between px-4 py-2.5 text-sm ${statusColor(s.status)}`}>
-                        <span className="flex items-center gap-2">
-                          <span className="text-[10px]">{statusDot(s.status)}</span>
-                          {s.startTime.slice(0, 5)} – {s.endTime.slice(0, 5)}
-                          {s.notes && <span className="text-[11px] opacity-60 ml-2">{s.notes}</span>}
-                        </span>
-                        {s.status !== 'booked' && (
-                          <button onClick={() => handleDelete(s.id)} disabled={deletingId === s.id}
-                            className="text-[11px] text-muted-foreground hover:text-destructive transition-colors">
-                            {deletingId === s.id ? '...' : 'Удалить'}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function ProfilePage() {
   return <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" /></div>}><ProfileContent /></Suspense>;
 }

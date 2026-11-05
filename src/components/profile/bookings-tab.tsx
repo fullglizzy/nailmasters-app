@@ -10,6 +10,7 @@ import {
 import { ReviewModal } from '@/components/review/review-modal';
 import { useOrders } from '@/hooks/api';
 import { useAuth } from '@/components/providers/auth-provider';
+import { formatPhoneDisplay } from '@/lib/phone';
 import type { OrderEnriched } from '@/lib/types';
 
 /* ── Constants ──────────────────────────────────────────── */
@@ -327,7 +328,7 @@ function OrderCard({ order: o, isMaster, isExpanded, isActing, onToggle, onActio
                   )}
                   {counterpartyPhone && (
                     <a href={`tel:${counterpartyPhone}`} className="flex items-center gap-1 text-xs text-primary hover:underline shrink-0">
-                      <Phone className="h-3 w-3" />{counterpartyPhone}
+                      <Phone className="h-3 w-3" />{formatPhoneDisplay(counterpartyPhone)}
                     </a>
                   )}
                 </div>

@@ -18,9 +18,12 @@ export function AppHeader() {
 
   return (
     <header className="hidden md:block sticky top-0 z-40 border-b border-border/50 bg-background/85 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-7xl items-center px-4">
-        {/* Навигация — centered */}
-        <nav className="hidden md:flex flex-1 justify-center items-center gap-0.5">
+      <div className="mx-auto grid h-14 max-w-7xl grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center px-4">
+        {/* Пустая колонка слева — чтобы навигация стояла ровно по центру экрана */}
+        <div aria-hidden="true" />
+
+        {/* Навигация — по центру экрана */}
+        <nav className="hidden md:flex items-center justify-center gap-0.5">
           {[
             { href: '/explore', label: 'Лента' },
             { href: '/trending', label: 'Популярное' },
@@ -43,7 +46,7 @@ export function AppHeader() {
         </nav>
 
         {/* Действия — прижаты вправо */}
-        <div className="flex items-center gap-1.5 ml-auto">
+        <div className="flex items-center justify-end gap-1.5">
           <Link
             href="/search"
             aria-label="Поиск"

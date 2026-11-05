@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizePhone, isValidPhone } from '@/lib/phone';
 
 // ============================================================
 // Auth schemas
@@ -119,8 +120,55 @@ export const updateMasterProfileSchema = z.object({
   workFormat: z.array(z.enum(['salon', 'home'])).optional(),
   sterilization: z.boolean().optional(),
   disposableTools: z.boolean().optional(),
+  age: z.number().int().min(14).max(120).optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
+});
+
+// ── Admin: создание и редактирование мастеров ───────────────
+
+const adminPhoneSchema = z
+  .string()
+  .min(7, 'Введите телефон')
+  .max(20)
+  .transform(normalizePhone)
+  .refine(isValidPhone, 'Некорректный телефон')
+  .refine((phone) => /^\+1\d{10}$/.test(phone), 'Телефон должен быть в формате США: +1 и 10 цифр');
+
+export const adminMasterProfileSchema = z.object({
+  fullName: z.string().min(2, 'Введите имя').max(255),
+  address: z.string().min(1, 'Укажите адрес').max(500),
+  description: z.string().max(5000).optional(),
+  experience: z.string().min(1, 'Укажите опыт работы').max(100),
+  city: z.string().min(1, 'Выберите город').max(100),
+  specialties: z.array(z.string()).min(1, 'Выберите хотя бы одну специализацию'),
+  startingPrice: z.number().positive('Цена должна быть положительной'),
+  workFormat: z.array(z.enum(['salon', 'home'])).min(1, 'Выберите формат работы'),
+  sterilization: z.boolean().default(false),
+  disposableTools: z.boolean().default(false),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+});
+
+const adminRepeatDaysSchema = z.array(z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']));
+
+export const adminScheduleBatchSchema = z.object({
+  workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Формат даты: YYYY-MM-DD'),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Формат времени: HH:MM'),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, 'Формат времени: HH:MM'),
+  intervalMinutes: z.number().int().min(15, 'Минимум 15 мин').max(480, 'Максимум 480 мин').optional(),
+  repeatDays: adminRepeatDaysSchema.optional(),
+  weeks: z.number().int().min(1).max(4).default(4),
+});
+
+export const adminUpdateMasterSchema = z.object({
+  phone: adminPhoneSchema.optional(),
+  username: z.string().min(3, 'Минимум 3 символа').max(255).optional(),
+  age: z.number().int().min(14).max(120).optional(),
+  avatarUrl: z.string().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
+  isModerated: z.boolean().optional(),
+  profile: adminMasterProfileSchema.partial().optional(),
 });
 
 export const masterFiltersSchema = z.object({
@@ -152,6 +200,18 @@ export const addDesignToServiceSchema = z.object({
   customPrice: z.number().positive().optional(),
   additionalDuration: z.number().int().positive().optional(),
   notes: z.string().max(1000).optional(),
+});
+
+export const adminCreateMasterSchema = z.object({
+  phone: adminPhoneSchema,
+  username: z.string().min(3, 'Минимум 3 символа').max(255).optional(),
+  age: z.number().int().min(14).max(120).optional(),
+  avatarUrl: z.string().max(500).optional(),
+  isActive: z.boolean().default(true),
+  isModerated: z.boolean().default(true),
+  profile: adminMasterProfileSchema,
+  services: z.array(createServiceSchema).max(50).default([]),
+  schedule: adminScheduleBatchSchema.optional(),
 });
 
 // ============================================================
@@ -219,3 +279,6 @@ export type CreateTimeSlotInput = z.infer<typeof createTimeSlotSchema>;
 export type CreateReviewInput = z.infer<typeof createReviewSchema>;
 export type CreateRatingInput = z.infer<typeof createRatingSchema>;
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
+export type AdminCreateMasterInput = z.infer<typeof adminCreateMasterSchema>;
+export type AdminUpdateMasterInput = z.infer<typeof adminUpdateMasterSchema>;
+export type AdminScheduleBatchInput = z.infer<typeof adminScheduleBatchSchema>;
