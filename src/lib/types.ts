@@ -311,6 +311,142 @@ export interface AdminMasterDetails {
   schedule: ScheduleSlot[];
 }
 
+// ── Admin: импорт мастеров из Excel ───────────────────────
+
+export type MasterImportStatus = 'ready' | 'duplicate' | 'skipped' | 'error';
+
+export interface MasterImportIssue {
+  field?: string;
+  column?: string;
+  message: string;
+}
+
+export interface MasterImportProfileData {
+  fullName: string;
+  address: string;
+  description?: string;
+  experience: string;
+  city: string;
+  specialties: string[];
+  startingPrice: number;
+  workFormat: ('salon' | 'home')[];
+  sterilization: boolean;
+  disposableTools: boolean;
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface MasterImportMasterData {
+  phone: string;
+  username?: string;
+  age?: number;
+  isActive: boolean;
+  isModerated: boolean;
+  profile: MasterImportProfileData;
+}
+
+export interface MasterImportMasterRow {
+  row: number;
+  status: MasterImportStatus;
+  data: MasterImportMasterData | null;
+  display: { fullName: string; phone: string; city: string };
+  errors: MasterImportIssue[];
+  warnings: MasterImportIssue[];
+}
+
+export interface MasterImportServiceRow {
+  row: number;
+  status: MasterImportStatus;
+  phone: string;
+  name: string;
+  price: number | null;
+  duration: number | null;
+  description?: string;
+  masterRow: number | null;
+  errors: MasterImportIssue[];
+  warnings: MasterImportIssue[];
+}
+
+export interface MasterImportSchedulePattern {
+  startDate: string;
+  startTime: string;
+  endTime: string;
+  intervalMinutes?: number;
+  repeatDays: string[];
+  weeks: number;
+}
+
+export interface MasterImportScheduleRow {
+  row: number;
+  status: MasterImportStatus;
+  phone: string;
+  pattern: MasterImportSchedulePattern | null;
+  slotsCount: number;
+  masterRow: number | null;
+  errors: MasterImportIssue[];
+  warnings: MasterImportIssue[];
+}
+
+export interface MasterImportSummary {
+  masterRows: number;
+  readyMasters: number;
+  duplicateMasters: number;
+  errorMasters: number;
+  serviceRows: number;
+  readyServices: number;
+  skippedServices: number;
+  errorServices: number;
+  scheduleRows: number;
+  readySchedules: number;
+  skippedSchedules: number;
+  errorSchedules: number;
+  scheduleSlots: number;
+  withoutCoordinates: number;
+}
+
+export interface MasterImportPreview {
+  summary: MasterImportSummary;
+  masters: MasterImportMasterRow[];
+  services: MasterImportServiceRow[];
+  schedule: MasterImportScheduleRow[];
+}
+
+export interface MasterImportCreatedRow {
+  row: number;
+  userId: string;
+  fullName: string;
+  phone: string;
+  services: number;
+  slots: number;
+}
+
+export interface MasterImportSkippedRow {
+  row: number;
+  fullName: string;
+  phone: string;
+  reason: string;
+}
+
+export interface MasterImportFailedRow {
+  row: number;
+  fullName: string;
+  phone: string;
+  error: string;
+}
+
+export interface MasterImportResult {
+  created: MasterImportCreatedRow[];
+  skipped: MasterImportSkippedRow[];
+  failed: MasterImportFailedRow[];
+  totals: {
+    mastersCreated: number;
+    servicesCreated: number;
+    slotsCreated: number;
+    mastersSkipped: number;
+    mastersFailed: number;
+  };
+}
+
 // ── Comment ───────────────────────────────────────────────
 
 export interface Comment {

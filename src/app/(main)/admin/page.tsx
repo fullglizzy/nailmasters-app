@@ -7,13 +7,14 @@ import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Users, Palette, ShoppingBag, BarChart3, Shield, Search,
-  Star, Clock, TrendingUp, Plus, Pencil
+  Star, Clock, TrendingUp, Plus, Pencil, Upload
 } from 'lucide-react';
 import { useAdminStats, useAdminUsers, useAdminDesigns, useAdminOrders, useAdminMasters } from '@/hooks/api';
 import { useAuth } from '@/components/providers/auth-provider';
 import type { AdminUser, AdminMasterListItem, Design, OrderEnriched } from '@/lib/types';
 import { OrderDetailModal } from './order-detail-modal';
 import { MasterEditorModal } from './master-editor-modal';
+import { MasterImportModal } from './master-import-modal';
 
 type Tab = 'overview' | 'users' | 'designs' | 'orders' | 'masters';
 
@@ -27,6 +28,7 @@ export default function AdminPage() {
   const [masterSearch, setMasterSearch] = useState('');
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingMasterId, setEditingMasterId] = useState<string | undefined>(undefined);
+  const [importOpen, setImportOpen] = useState(false);
 
   const role = user?.role ?? '';
 
@@ -237,12 +239,20 @@ export default function AdminPage() {
                   className="w-full rounded-lg border bg-background pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
-              <button
-                onClick={() => { setEditingMasterId(undefined); setEditorOpen(true); }}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-              >
-                <Plus className="h-4 w-4" />Создать мастера
-              </button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  onClick={() => setImportOpen(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold hover:bg-accent transition-colors"
+                >
+                  <Upload className="h-4 w-4" />Импорт из Excel
+                </button>
+                <button
+                  onClick={() => { setEditingMasterId(undefined); setEditorOpen(true); }}
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />Создать мастера
+                </button>
+              </div>
             </div>
 
             {mastersLoading && masters.length === 0 ? (
@@ -345,5 +355,6 @@ export default function AdminPage() {
       onClose={() => setEditorOpen(false)}
       onSaved={() => {}}
     />
+    <MasterImportModal open={importOpen} onClose={() => setImportOpen(false)} />
   </>);
 }
